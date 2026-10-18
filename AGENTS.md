@@ -52,3 +52,20 @@ The panel shows today or the last 7 days (stats are per day; after midnight "tod
 Right click on the menu bar icon: auto-fix, pause, quit.
 
 Build and install: `scripts/install.sh`. Tests: `scripts/test.sh` (also removes the Debug app afterwards: a second copy with the same bundle ID steals the permissions).
+
+## Menu bar icon
+
+`StatusItemController.swift` (the same file in Genius Switcher and MonitorCtl): left click = panel,
+right click = menu with "Завершить". Not SwiftUI's `MenuBarExtra`: when the icon is turned off in
+System Settings → Menu Bar, a `MenuBarExtra`-only app quits right after launch (MonitorCtl did, so
+its keys silently stopped working, and the unit tests' host quit too). With an `NSStatusItem` the
+app keeps running; opening it again from Spotlight/Finder shows the panel in a small window.
+
+## Versions
+
+Every fix or feature bumps the version (`project.yml`). The pre-commit hook
+(`scripts/git-hooks/pre-commit`; enable once per clone: `git config core.hooksPath scripts/git-hooks`)
+does it when a commit touches the app: `CURRENT_PROJECT_VERSION` +1 and the patch (0.1.0 → 0.1.1).
+For a new feature bump the minor by hand before committing (`MARKETING_VERSION: "0.2.0"`); the hook
+keeps a hand-made bump. The version is shown next to the title in the panel; the log's launch line
+also has the build number.

@@ -15,25 +15,30 @@ struct GeniusSwitcherApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     static let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
-    private var statusItem: NSStatusItem!
-    private let popover = NSPopover()
+    /// "0.1.1", shown next to the title in the panel.
+    static var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+
+    private var statusItem: StatusItemController?
 
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !Self.isRunningTests else { return }
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-        Log.info("Genius Switcher \(version) started")
-
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "character.cursor.ibeam", accessibilityDescription: "Genius Switcher")
-        statusItem.button?.target = self
-        statusItem.button?.action = #selector(statusItemClicked)
-        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-
-        popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenuView().environmentObject(Observer.shared))
-
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        Log.info("Genius Switcher \(Self.appVersion) (\(build)) started")
+        statusItem = StatusItemController(
+            symbol: "character.cursor.ibeam", title: "Genius Switcher",
+            content: { AnyView(MenuView().environmentObject(Observer.shared)) },
+            menuItems: { [weak self] in self?.contextMenuItems() ?? [] })
         Observer.shared.start()
+    }
+
+    /// Opened again from Spotlight or Finder: show the panel (the icon may be hidden).
+    @MainActor
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        statusItem?.showPanel()
+        return false
     }
 
     @MainActor
@@ -43,35 +48,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Observer.shared.stop()
     }
 
-    @MainActor @objc private func statusItemClicked() {
-        let event = NSApp.currentEvent
-        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
-            showContextMenu()
-        } else if popover.isShown {
-            popover.performClose(nil)
-        } else if let button = statusItem.button {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
-        }
-    }
-
-    @MainActor private func showContextMenu() {
+    /// Right click on the icon, above "Завершить".
+    @MainActor private func contextMenuItems() -> [NSMenuItem] {
         let observer = Observer.shared
-        let menu = NSMenu()
         let auto = NSMenuItem(title: "Автопереключение", action: #selector(toggleAutoFix), keyEquivalent: "")
         auto.target = self
         auto.state = observer.autoFix ? .on : .off
-        menu.addItem(auto)
         let pause = NSMenuItem(title: "Пауза наблюдения", action: #selector(togglePause), keyEquivalent: "")
         pause.target = self
         pause.state = observer.paused ? .on : .off
-        menu.addItem(pause)
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Завершить Genius Switcher", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        // Attached only for this click, so a left click still opens the panel.
-        statusItem.menu = menu
-        statusItem.button?.performClick(nil)
-        statusItem.menu = nil
+        return [auto, pause]
     }
 
     @MainActor @objc private func toggleAutoFix() { Observer.shared.autoFix.toggle() }

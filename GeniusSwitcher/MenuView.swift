@@ -8,6 +8,12 @@ struct MenuView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Genius Switcher").font(.headline)
+                Text(AppDelegate.appVersion)
+                    .font(.caption).foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
+            }
             if !observer.hasPermission {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Нет доступа к «Мониторингу ввода»", systemImage: "exclamationmark.triangle.fill")
