@@ -46,9 +46,13 @@ struct MenuView: View {
                         get: { !observer.autoOffApps.contains(app.id) },
                         set: { observer.setAutoOff(app.id, !$0) }))
                 }
+                HStack {
+                    Text("Мои исключения: \(observer.userExceptions.words.count)").font(.caption).foregroundStyle(.secondary)
+                    Button("Изменить…") { ExceptionsEditor.show() }.font(.caption)
+                }
                 if observer.exceptionCount > 0 {
                     HStack {
-                        Text("Исключений: \(observer.exceptionCount)").font(.caption).foregroundStyle(.secondary)
+                        Text("Отменённые исправления: \(observer.exceptionCount)").font(.caption).foregroundStyle(.secondary)
                         Button("Сбросить") { observer.clearExceptions() }.font(.caption)
                     }
                 }

@@ -58,6 +58,39 @@ struct FixExceptions {
     }
 }
 
+/// The user's own exceptions dictionary: words typed as is are never auto-fixed ("git", "ок",
+/// names). Unlike `FixExceptions` this is text: the user typed it in the panel. It lives in the
+/// settings only, never in the journal.
+struct UserExceptions: Equatable {
+    /// Lowercased, without punctuation at the edges, sorted, no duplicates.
+    private(set) var words: [String]
+
+    init(words: [String] = []) {
+        self.words = Array(Set(words.compactMap(Self.normalize))).sorted()
+    }
+
+    /// One word per line; commas, semicolons and spaces separate words too.
+    init(text: String) {
+        self.init(words: text.components(separatedBy: CharacterSet(charactersIn: ",;").union(.whitespacesAndNewlines)))
+    }
+
+    var text: String { words.joined(separator: "\n") }
+
+    func contains(_ word: String) -> Bool {
+        Self.normalize(word).map { words.contains($0) } ?? false
+    }
+
+    /// The word as typed, in the layout it was typed in.
+    func contains(_ keys: [TypedKey], language: String, renderer: LayoutRendering) -> Bool {
+        contains(renderer.text(keys, language: language))
+    }
+
+    static func normalize(_ word: String) -> String? {
+        let core = word.trimmingCharacters(in: CharacterSet.letters.inverted).lowercased()
+        return core.isEmpty ? nil : core
+    }
+}
+
 /// What the auto-fixer changed last, so Caps Lock right after it can put it back.
 struct LastFix {
     let keys: [TypedKey]

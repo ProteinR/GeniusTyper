@@ -275,6 +275,17 @@ final class AutoFixTests: XCTestCase {
         XCTAssertFalse(stored.contains("5,4"))
     }
 
+    func testUserExceptions() {
+        let exceptions = UserExceptions(text: "Привет\n  ok, git;\n\n(кто-то)\nprivet\nпривет")
+        XCTAssertEqual(exceptions.words, ["git", "ok", "privet", "кто-то", "привет"])
+        XCTAssertTrue(exceptions.contains("ПРИВЕТ,"))
+        XCTAssertFalse(exceptions.contains("..."))
+        // Matched as typed: "привет" typed in Russian is an exception, "ghbdtn" typed in English is not.
+        XCTAssertTrue(exceptions.contains(FakeLayouts.keys(privet), language: "ru", renderer: FakeLayouts()))
+        XCTAssertFalse(exceptions.contains(FakeLayouts.keys(privet), language: "en", renderer: FakeLayouts()))
+        XCTAssertTrue(exceptions.contains(FakeLayouts.keys(privet + [44]), language: "ru", renderer: FakeLayouts()))
+    }
+
     func testNoFixAfterEnterOrReset() {
         XCTAssertTrue(AutoFixRules.fixes(after: " "))
         XCTAssertTrue(AutoFixRules.fixes(after: "."))

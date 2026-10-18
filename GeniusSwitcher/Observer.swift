@@ -48,6 +48,11 @@ final class Observer: ObservableObject {
 
     @Published private(set) var exceptionCount = 0
 
+    /// The user's own exceptions dictionary (edited in the panel).
+    @Published private(set) var userExceptions: UserExceptions {
+        didSet { UserDefaults.standard.set(userExceptions.words, forKey: "userExceptions") }
+    }
+
     @Published private(set) var excludedApps: Set<String> {
         didSet { UserDefaults.standard.set(Array(excludedApps), forKey: "excludedApps") }
     }
@@ -90,6 +95,7 @@ final class Observer: ObservableObject {
         autoOffApps = (defaults.array(forKey: "autoOffApps") as? [String]).map(Set.init) ?? AutoFixRules.defaultOff
         exceptions = FixExceptions(hashes: Set(defaults.array(forKey: "fixExceptions") as? [String] ?? []))
         exceptionCount = exceptions.hashes.count
+        userExceptions = UserExceptions(words: defaults.stringArray(forKey: "userExceptions") ?? [])
         tracker = WordTracker(renderer: layouts)
         recorder = Recorder(renderer: layouts, detector: .system)
     }
@@ -178,6 +184,11 @@ final class Observer: ObservableObject {
 
     func clearExceptions() {
         exceptions = FixExceptions()
+    }
+
+    func setUserExceptions(_ text: String) {
+        userExceptions = UserExceptions(text: text)
+        Log.info("User exceptions saved (\(userExceptions.words.count) words)", "auto")
     }
 
     func setExcluded(_ bundleID: String, _ excluded: Bool) {
@@ -307,6 +318,7 @@ final class Observer: ObservableObject {
               !word.mixed, AutoFixRules.fixes(after: word.endedBy),
               let target = layouts.other(than: word.language),
               !exceptions.contains(word.keys, language: word.language),
+              !userExceptions.contains(word.keys, language: word.language, renderer: layouts),
               LayoutDetector.system.verdict(word.keys, language: word.language, renderer: layouts, trimEdges: false) == .fix
         else { return }
 

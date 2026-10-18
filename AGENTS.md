@@ -16,7 +16,11 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
 - **Auto-fix** (`AutoFixer.swift`, Accessibility permission): after a space or punctuation (not
   Enter), a word with verdict `fix` on all its keys is erased and typed in the other layout, and the
   layout is switched. Caps Lock right after it (no key in between, 5 s) undoes it and adds the word
-  to exceptions (SHA-256 of the key codes, no text). Off by default in terminals and code editors,
+  to exceptions (SHA-256 of the key codes, no text). Own exceptions dictionary ("Мои исключения" →
+  "Изменить…", `ExceptionsEditor.swift`, `UserExceptions`): words, as typed, never fixed; stored as
+  text in the settings (`userExceptions`), never in the journal. Seeded on 2026-10-18 with
+  abbreviations from the INVENTIRE workspace that the detector would fix (rtl, ctx, deps…); 2-letter
+  ones and ones whose Russian side is a common word (dfc = «вас») were left out. Off by default in terminals and code editors,
   per-app switch in the panel. Genius Switcher's own events carry a marker and are ignored by the tap.
 - **Watches typing, listen-only** (`Observer.swift`, Input Monitoring permission). Clicks, arrows, ⌘/⌃ shortcuts and app switches reset the tracked line.
 - `WordTracker.swift` (pure, tested): keys → finished words and *rewrites* (erase, then retype).
