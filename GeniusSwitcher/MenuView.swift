@@ -86,6 +86,7 @@ struct MenuView: View {
                     set: { observer.setExcluded(app.id, $0) }))
             }
             LoginItemToggle()
+            MenuBarIconToggle()
 
             HStack {
                 Button("Журнал") { NSWorkspace.shared.open(Journal.directory) }

@@ -1,6 +1,34 @@
 import AppKit
 import SwiftUI
 
+/// Whether the menu bar icon is shown: the "Значок в строке меню" switch in the panel. The state is
+/// the status item's own (AppKit saves it per app); it is also off after ⌘-dragging the icon out.
+@MainActor
+final class MenuBarIcon: ObservableObject {
+    static let shared = MenuBarIcon()
+
+    fileprivate weak var statusItem: NSStatusItem?
+    private var observation: NSKeyValueObservation?
+
+    @Published var isShown = true {
+        didSet {
+            guard let statusItem, statusItem.isVisible != isShown else { return }
+            statusItem.isVisible = isShown
+            Log.info("Menu bar icon \(isShown ? "shown" : "hidden")")
+        }
+    }
+
+    fileprivate func attach(_ item: NSStatusItem) {
+        statusItem = item
+        isShown = item.isVisible
+        observation = item.observe(\.isVisible) { item, _ in
+            Task { @MainActor in
+                if MenuBarIcon.shared.isShown != item.isVisible { MenuBarIcon.shared.isShown = item.isVisible }
+            }
+        }
+    }
+}
+
 /// The menu bar icon: left click opens the panel, right click a small menu ending with "Завершить".
 ///
 /// Made by hand rather than with SwiftUI's `MenuBarExtra`: when the icon is turned off in System
@@ -23,6 +51,8 @@ final class StatusItemController: NSObject {
         self.menuItems = menuItems
         quitTitle = "Завершить \(title)"
         super.init()
+        statusItem.behavior = .removalAllowed
+        MenuBarIcon.shared.attach(statusItem)
         statusItem.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)
         statusItem.button?.target = self
         statusItem.button?.action = #selector(clicked)
@@ -43,7 +73,7 @@ final class StatusItemController: NSObject {
         }
     }
 
-    /// Hidden in System Settings → Menu Bar, or pushed out by a full menu bar.
+    /// Hidden with the switch, in System Settings → Menu Bar, or pushed out by a full menu bar.
     private var isIconVisible: Bool {
         guard statusItem.isVisible, let window = statusItem.button?.window else { return false }
         return window.occlusionState.contains(.visible) && window.frame.maxY > 0
@@ -94,5 +124,16 @@ final class StatusItemController: NSObject {
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
+    }
+}
+
+/// "Значок в строке меню" for the panel. Off: the app keeps working; open it again from
+/// Spotlight or Finder to get the panel back.
+struct MenuBarIconToggle: View {
+    @ObservedObject private var icon = MenuBarIcon.shared
+
+    var body: some View {
+        Toggle("Значок в строке меню", isOn: $icon.isShown)
+            .help("Без значка приложение продолжает работать; панель открывается повторным запуском из Spotlight или Finder")
     }
 }
