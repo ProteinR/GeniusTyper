@@ -32,7 +32,15 @@ final class ClipboardStore: ObservableObject {
         }
     }
 
-    /// ⇧⌘C could not be registered: another app (Maccy) holds it.
+    /// Opens the history window (⇧⌘C, as in Maccy).
+    @Published var hotKey: KeyCombo {
+        didSet {
+            if let data = try? JSONEncoder().encode(hotKey) { UserDefaults.standard.set(data, forKey: "clipboardHotKey") }
+            registerHotKey()
+        }
+    }
+
+    /// The shortcut could not be registered: another app holds it.
     @Published private(set) var hotKeyTaken = false
 
     var totalBytes: Int { items.reduce(0) { $0 + $1.bytes } }
@@ -50,6 +58,8 @@ final class ClipboardStore: ObservableObject {
         let defaults = UserDefaults.standard
         enabled = defaults.object(forKey: "clipboardHistory") as? Bool ?? true
         limitMB = defaults.object(forKey: "clipboardLimitMB") as? Int ?? 100
+        hotKey = defaults.data(forKey: "clipboardHotKey").flatMap { try? JSONDecoder().decode(KeyCombo.self, from: $0) }
+            ?? .clipboardDefault
     }
 
     func start() {
@@ -63,10 +73,16 @@ final class ClipboardStore: ObservableObject {
         timer.tolerance = 0.25
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-        hotKeyTaken = !HotKey.register(keyCode: 8, modifiers: [.command, .shift]) {  // ⇧⌘C
+        registerHotKey()
+        Log.info("Clipboard history: \(items.count) items, \(totalBytes / 1024) KB, hot key \(hotKey.title) \(hotKeyTaken ? "taken" : "ok")", "clipboard")
+    }
+
+    /// Also after recording a new shortcut (recording turns the old one off, so it is not triggered).
+    func registerHotKey() {
+        guard enabled, timer != nil else { return }
+        hotKeyTaken = !HotKey.register(keyCode: UInt32(hotKey.keyCode), modifiers: hotKey.flags) {
             MainActor.assumeIsolated { ClipboardWindow.toggle() }
         }
-        Log.info("Clipboard history: \(items.count) items, \(totalBytes / 1024) KB, hot key \(hotKeyTaken ? "taken" : "ok")", "clipboard")
     }
 
     func stop() {

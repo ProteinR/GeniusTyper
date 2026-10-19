@@ -265,7 +265,7 @@ struct MenuBarIconStylePicker: View {
             Picker("Язык на значке:", selection: $icon.languageMark) {
                 ForEach(MenuBarIcon.LanguageMark.allCases) { Text($0.title).tag($0) }
             }
-            .pickerStyle(.segmented)
+            .fixedSize()
             .help("Раскладка на значке заменяет системный значок языка: его можно убрать в Системных настройках → Клавиатура → Источники ввода")
             Toggle("с иконкой", isOn: $icon.showsSymbol)
                 .disabled(icon.languageMark == .none)

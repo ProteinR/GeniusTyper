@@ -43,7 +43,10 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   entries. Skips password managers, "Не следить в" apps, nspasteboard.org private/transient types
   and seed phrases (Maccy's regex). Stored in `~/Library/Application Support/GeniusSwitcher/clipboard/`
   (`index.json` with texts + one folder per entry). Measured against Maccy: `MACCY-BASELINE.md`.
-  Maccy must not run at the same time (both take ⇧⌘C; the second registration does not fail).
+  The shortcut is changeable in the panel ("Открывать": click, press a combination with ⌘/⌥/⌃;
+  `KeyCombo`, stored as `clipboardHotKey`). Maccy must not run at the same time: both take ⇧⌘C, the
+  second registration does not fail and the app registered last gets it; the panel warns while
+  Maccy is running.
 - **Watches typing, listen-only** (`Observer.swift`, Input Monitoring permission). Clicks, arrows, ⌘/⌃ shortcuts and app switches reset the tracked line.
 - `WordTracker.swift` (pure, tested): keys → finished words and *rewrites* (erase, then retype).
   Words are kept as physical keys, so "ghbdtn" and "привет" are the same keys in two layouts.
