@@ -8,10 +8,8 @@ final class Observer: ObservableObject {
     static let shared = Observer()
 
     @Published private(set) var hasPermission = CGPreflightListenEventAccess()
-    @Published private(set) var stats = DayStats()
-    /// The last 7 days including today.
-    @Published private(set) var weekStats = DayStats()
-    @Published private(set) var recentFixes: [String] = []
+    /// Changes with every word: watched only by the statistics window, not by the panel.
+    let typing = TypingStats()
     /// The app typed in last (not Genius Switcher itself), for "do not watch in …".
     @Published private(set) var lastApp: (id: String, name: String)?
 
@@ -105,7 +103,7 @@ final class Observer: ObservableObject {
 
     func start() {
         Journal.prune()
-        Journal.load(Date()).forEach { stats.add($0) }
+        Journal.load(Date()).forEach { typing.stats.add($0) }
         loadWeek()
         knownLanguage = layouts.currentLanguage()
         MenuBarIcon.shared.language = knownLanguage
@@ -175,7 +173,7 @@ final class Observer: ObservableObject {
         for day in 0..<7 {
             Journal.load(Date().addingTimeInterval(-Double(day) * 86_400)).forEach { week.add($0) }
         }
-        weekStats = week
+        typing.weekStats = week
     }
 
     func requestPostPermission() {
@@ -207,9 +205,9 @@ final class Observer: ObservableObject {
 
     func deleteJournal() {
         journal.deleteAll()
-        stats = DayStats()
-        weekStats = DayStats()
-        recentFixes = []
+        typing.stats = DayStats()
+        typing.weekStats = DayStats()
+        typing.recentFixes = []
         Log.info("Journal deleted by the user", "journal")
     }
 
@@ -496,10 +494,19 @@ final class Observer: ObservableObject {
         let today = Journal.file(for: Date()).lastPathComponent
         if today != statsDay {
             statsDay = today
-            stats = DayStats()
+            typing.stats = DayStats()
             loadWeek()
         }
-        entries.forEach { stats.add($0); weekStats.add($0) }
-        if recorder.recentFixes != recentFixes { recentFixes = recorder.recentFixes }
+        entries.forEach { typing.stats.add($0); typing.weekStats.add($0) }
+        if recorder.recentFixes != typing.recentFixes { typing.recentFixes = recorder.recentFixes }
     }
+}
+
+/// Today's and the week's numbers and the last fixes, for the statistics window.
+@MainActor
+final class TypingStats: ObservableObject {
+    @Published var stats = DayStats()
+    /// The last 7 days including today.
+    @Published var weekStats = DayStats()
+    @Published var recentFixes: [String] = []
 }

@@ -11,11 +11,18 @@ import CryptoKit
 final class ClipboardStore: ObservableObject {
     static let shared = ClipboardStore()
 
-    static let directory = Journal.directory.deletingLastPathComponent().appendingPathComponent("clipboard", isDirectory: true)
-    private static let indexFile = directory.appendingPathComponent("index.json")
+    nonisolated static let directory = Journal.directory.deletingLastPathComponent().appendingPathComponent("clipboard", isDirectory: true)
+    nonisolated private static let indexFile = directory.appendingPathComponent("index.json")
     static let limits = [50, 100, 200, 500]
 
-    @Published private(set) var items: [ClipboardItem] = []
+    /// Not published: only the history window reads it, when it opens. The panel watches `usage`.
+    private(set) var items: [ClipboardItem] = [] {
+        didSet {
+            let new = ClipboardUsage.Value(count: items.count, bytes: totalBytes)
+            if usage.value != new { usage.value = new }
+        }
+    }
+    let usage = ClipboardUsage()
 
     @Published var enabled: Bool {
         didSet {
@@ -51,7 +58,13 @@ final class ClipboardStore: ObservableObject {
     private var loaded = false
     /// Disk writes, off the main thread, in order.
     private let io = DispatchQueue(label: "clipboard.io", qos: .utility)
-    private var thumbnails: [UUID: NSImage] = [:]
+    private var saveWork: DispatchWorkItem?
+    /// Pictures of the rows on screen: a few KB each, decoded from the small thumbnail files.
+    private let thumbnails: NSCache<NSUUID, NSImage> = {
+        let cache = NSCache<NSUUID, NSImage>()
+        cache.countLimit = 100
+        return cache
+    }()
     private var icons: [String: NSImage] = [:]
 
     private init() {
@@ -74,6 +87,9 @@ final class ClipboardStore: ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         registerHotKey()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            MainActor.assumeIsolated { if ClipboardStore.shared.enabled { ClipboardWindow.prepare() } }
+        }
         Log.info("Clipboard history: \(items.count) items, \(totalBytes / 1024) KB, hot key \(hotKey.title) \(hotKeyTaken ? "taken" : "ok")", "clipboard")
     }
 
@@ -103,70 +119,104 @@ final class ClipboardStore: ObservableObject {
         guard !types.isEmpty, types.isDisjoint(with: ClipboardRules.ignoredTypes) else { return }
         let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         if let app, Observer.shared.excludedApps.contains(app) { return }
-        guard let (item, payload) = capture(pasteboard, app: app) else { return }
-        add(item, payload: payload)
+        guard let copied = read(pasteboard) else { return }
+        // Hashing, TIFF → PNG and the thumbnail take long for big images: off the main thread.
+        let limit = limitBytes
+        io.async {
+            guard let (item, payload, thumbnail) = Self.process(copied, app: app) else { return }
+            Self.write(item.id, payload: payload, thumbnail: thumbnail)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let store = ClipboardStore.shared
+                    store.apply(ClipboardRules.insert(item, into: store.items, limit: limit))
+                    // Decoding a big image for its thumbnail takes tens of MB for a moment.
+                    if item.kind == .image { Memory.giveBackSoon() }
+                }
+            }
+        }
     }
 
-    /// The entry and the data to save next to it, by pasteboard type.
-    private func capture(_ pasteboard: NSPasteboard, app: String?) -> (ClipboardItem, [String: Data])? {
-        let id = UUID()
+    /// What was copied, as read from the pasteboard (on the main thread, as AppKit wants).
+    private enum Copied {
+        case files([String])
+        case text(String, formats: [String: Data])
+        case image(Data, type: String)
+    }
+
+    private func read(_ pasteboard: NSPasteboard) -> Copied? {
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
            !urls.isEmpty {
-            let paths = urls.map(\.path).joined(separator: "\n")
-            return (ClipboardItem(id: id, date: Date(), kind: .files, app: app, text: paths, stored: [:],
-                                  hash: Self.hash(Data(paths.utf8), kind: "files")), [:])
+            return .files(urls.map(\.path))
         }
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            guard !ClipboardRules.isSecret(text) else { return nil }
             // Formatting, to paste it as it was copied.
-            var payload: [String: Data] = [:]
+            var formats: [String: Data] = [:]
             for type in [NSPasteboard.PasteboardType.rtf, .html] {
-                if let data = pasteboard.data(forType: type), data.count < 5_000_000 { payload[type.rawValue] = data }
+                if let data = pasteboard.data(forType: type), data.count < 5_000_000 { formats[type.rawValue] = data }
             }
-            return (ClipboardItem(id: id, date: Date(), kind: .text, app: app, text: text,
-                                  stored: payload.mapValues(\.count), hash: Self.hash(Data(text.utf8), kind: "text")), payload)
+            return .text(text, formats: formats)
         }
         for type in [NSPasteboard.PasteboardType.png, NSPasteboard.PasteboardType("public.jpeg"),
                      NSPasteboard.PasteboardType("public.heic"), .tiff] {
-            guard var data = pasteboard.data(forType: type) else { continue }
-            var stored = type
-            // TIFF from the pasteboard is uncompressed (a 800×600 screenshot is 1.9 MB as TIFF, 0.4 MB as PNG).
-            if type == .tiff, let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) {
-                data = png
-                stored = .png
-            }
-            let size = Self.pixelSize(data)
-            return (ClipboardItem(id: id, date: Date(), kind: .image, app: app, text: nil, stored: [stored.rawValue: data.count],
-                                  width: size?.width, height: size?.height, hash: Self.hash(data, kind: "image")),
-                    [stored.rawValue: data])
+            if let data = pasteboard.data(forType: type) { return .image(data, type: type.rawValue) }
         }
         return nil
     }
 
-    private static func hash(_ data: Data, kind: String) -> String {
+    /// The entry, the data to save next to it by pasteboard type, and a small picture for the list.
+    nonisolated private static func process(_ copied: Copied, app: String?) -> (ClipboardItem, [String: Data], Data?)? {
+        let id = UUID()
+        switch copied {
+        case .files(let paths):
+            let text = paths.joined(separator: "\n")
+            return (ClipboardItem(id: id, date: Date(), kind: .files, app: app, text: text, stored: [:],
+                                  hash: hash(Data(text.utf8), kind: "files")), [:], nil)
+        case .text(let text, let formats):
+            guard !ClipboardRules.isSecret(text) else { return nil }
+            return (ClipboardItem(id: id, date: Date(), kind: .text, app: app, text: text,
+                                  stored: formats.mapValues(\.count), hash: hash(Data(text.utf8), kind: "text")), formats, nil)
+        case .image(var data, var type):
+            // TIFF from the pasteboard is uncompressed (a 800×600 screenshot is 1.9 MB as TIFF, 0.4 MB as PNG).
+            if type == NSPasteboard.PasteboardType.tiff.rawValue,
+               let png = NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]) {
+                data = png
+                type = NSPasteboard.PasteboardType.png.rawValue
+            }
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+            return (ClipboardItem(id: id, date: Date(), kind: .image, app: app, text: nil, stored: [type: data.count],
+                                  width: properties?[kCGImagePropertyPixelWidth] as? Int,
+                                  height: properties?[kCGImagePropertyPixelHeight] as? Int, hash: hash(data, kind: "image")),
+                    [type: data], thumbnail(source))
+        }
+    }
+
+    /// A PNG of at most `thumbnailPixels` on the long side: the list shows it 40 pt high.
+    nonisolated static let thumbnailPixels = 160
+    nonisolated private static let thumbnailFile = "thumbnail"
+
+    nonisolated private static func thumbnail(_ source: CGImageSource) -> Data? {
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: thumbnailPixels,
+        ] as CFDictionary) else { return nil }
+        return NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+    }
+
+    nonisolated private static func hash(_ data: Data, kind: String) -> String {
         kind + ":" + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func pixelSize(_ data: Data) -> (width: Int, height: Int)? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int else { return nil }
-        return (width, height)
+    nonisolated private static func write(_ id: UUID, payload: [String: Data], thumbnail: Data?) {
+        guard !payload.isEmpty else { return }
+        let folder = folder(id)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for (type, data) in payload { try? data.write(to: folder.appendingPathComponent(type)) }
+        try? thumbnail?.write(to: folder.appendingPathComponent(thumbnailFile))
     }
 
     // MARK: Changing the history
-
-    private func add(_ item: ClipboardItem, payload: [String: Data]) {
-        let folder = Self.folder(item.id)
-        if !payload.isEmpty {
-            io.async {
-                try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                for (type, data) in payload { try? data.write(to: folder.appendingPathComponent(type)) }
-            }
-        }
-        apply(ClipboardRules.insert(item, into: items, limit: limitBytes))
-    }
 
     func delete(_ item: ClipboardItem) {
         apply((items.filter { $0.id != item.id }, [item]))
@@ -182,17 +232,36 @@ final class ClipboardStore: ObservableObject {
         let kept = Set(items.map(\.id))
         let removed = change.removed.filter { !kept.contains($0.id) }
         let folders = removed.map { Self.folder($0.id) }
-        removed.forEach { thumbnails[$0.id] = nil }
+        removed.forEach { thumbnails.removeObject(forKey: $0.id as NSUUID) }
         save(removing: folders)
     }
 
+    /// Removed entries' folders go at once; the index (all entries with their texts) is written
+    /// at most every 2 s, and when the app quits.
     private func save(removing folders: [URL] = []) {
+        if !folders.isEmpty {
+            io.async { folders.forEach { try? FileManager.default.removeItem(at: $0) } }
+        }
+        guard saveWork == nil else { return }
+        let work = DispatchWorkItem { [weak self] in self?.saveNow() }
+        saveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+    }
+
+    func saveNow() {
+        saveWork?.cancel()
+        saveWork = nil
         let snapshot = items
         io.async {
-            folders.forEach { try? FileManager.default.removeItem(at: $0) }
             guard let data = try? JSONEncoder().encode(snapshot) else { return }
             try? data.write(to: Self.indexFile, options: .atomic)
         }
+    }
+
+    /// Waits for the disk writes (quitting).
+    func flush() {
+        if saveWork != nil { saveNow() }
+        io.sync {}
     }
 
     private func load() {
@@ -211,7 +280,7 @@ final class ClipboardStore: ObservableObject {
         }
     }
 
-    private static func folder(_ id: UUID) -> URL {
+    nonisolated private static func folder(_ id: UUID) -> URL {
         directory.appendingPathComponent(id.uuidString, isDirectory: true)
     }
 
@@ -256,29 +325,64 @@ final class ClipboardStore: ObservableObject {
 
     // MARK: Pictures for the window
 
-    /// A small picture of an image entry for the list (cached), or a bigger one for the preview.
-    func thumbnail(_ item: ClipboardItem, maxPixels: Int = 120) -> NSImage? {
-        let cache = maxPixels <= 120
-        if cache, let image = thumbnails[item.id] { return image }
-        guard let type = item.stored.keys.first,
-              let source = CGImageSourceCreateWithURL(Self.folder(item.id).appendingPathComponent(type) as CFURL, nil),
+    /// The small picture of an image entry, for the list.
+    func thumbnail(_ item: ClipboardItem) -> NSImage? {
+        if let image = thumbnails.object(forKey: item.id as NSUUID) { return image }
+        let file = Self.folder(item.id).appendingPathComponent(Self.thumbnailFile)
+        if !FileManager.default.fileExists(atPath: file.path) {
+            // Entries of 0.6.0 had none.
+            guard let type = item.stored.keys.first,
+                  let source = CGImageSourceCreateWithURL(Self.folder(item.id).appendingPathComponent(type) as CFURL, nil),
+                  let data = Self.thumbnail(source) else { return nil }
+            try? data.write(to: file)
+        }
+        guard let image = image(file, maxPixels: Self.thumbnailPixels) else { return nil }
+        thumbnails.setObject(image, forKey: item.id as NSUUID)
+        return image
+    }
+
+    /// The image of an entry for the preview, downscaled to `maxPixels` (not cached).
+    func previewImage(_ item: ClipboardItem, maxPixels: Int) -> NSImage? {
+        guard let type = item.stored.keys.first else { return nil }
+        return image(Self.folder(item.id).appendingPathComponent(type), maxPixels: maxPixels)
+    }
+
+    private func image(_ file: URL, maxPixels: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
               let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                   kCGImageSourceCreateThumbnailFromImageAlways: true,
                   kCGImageSourceCreateThumbnailWithTransform: true,
                   kCGImageSourceThumbnailMaxPixelSize: maxPixels,
               ] as CFDictionary) else { return nil }
         let scale = NSScreen.main?.backingScaleFactor ?? 2
-        let image = NSImage(cgImage: cgImage, size: NSSize(width: CGFloat(cgImage.width) / scale, height: CGFloat(cgImage.height) / scale))
-        if cache { thumbnails[item.id] = image }
-        return image
+        return NSImage(cgImage: cgImage, size: NSSize(width: CGFloat(cgImage.width) / scale, height: CGFloat(cgImage.height) / scale))
     }
 
     func icon(_ bundleID: String?) -> NSImage? {
         guard let bundleID else { return nil }
         if let icon = icons[bundleID] { return icon }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return nil }
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 16, height: 16)
+        // Drawn once into a 16 pt bitmap: the app's own icon keeps every size up to 1024 px.
+        let full = NSWorkspace.shared.icon(forFile: url.path)
+        let size = NSSize(width: 16, height: 16)
+        let icon = NSImage(size: size, flipped: false) { rect in
+            full.draw(in: rect)
+            return true
+        }
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        if let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(16 * scale), pixelsHigh: Int(16 * scale),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) {
+            bitmap.size = size
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+            full.draw(in: NSRect(origin: .zero, size: size))
+            NSGraphicsContext.restoreGraphicsState()
+            let small = NSImage(size: size)
+            small.addRepresentation(bitmap)
+            icons[bundleID] = small
+            return small
+        }
         icons[bundleID] = icon
         return icon
     }
@@ -287,4 +391,15 @@ final class ClipboardStore: ObservableObject {
         guard let bundleID, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
         return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
     }
+}
+
+/// How many entries and bytes the history holds: shown in the panel.
+@MainActor
+final class ClipboardUsage: ObservableObject {
+    struct Value: Equatable {
+        var count = 0
+        var bytes = 0
+    }
+
+    @Published var value = Value()
 }

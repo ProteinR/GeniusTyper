@@ -58,6 +58,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuItems: { [weak self] in self?.contextMenuItems() ?? [] })
         Observer.shared.start()
         ClipboardStore.shared.start()
+
+        let arguments = CommandLine.arguments
+        if arguments.contains("--panel-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self.statusItem?.runPanelTest() }
+        }
+        if arguments.contains("--history-test") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { ClipboardWindow.runTest() }
+        }
+        if arguments.contains("--stress-test") { runStressTest() }
+    }
+
+    /// `--stress-test`: three rounds of opening the panel 10 times and the clipboard history 10 times
+    /// (moving through it until the preview opens), logging the memory footprint after each round.
+    /// Growing every round = a leak; growing once and then flat = caches. `leaks <pid>` afterwards
+    /// lists unreachable memory (install with `PROFILE=1 scripts/install.sh`).
+    @MainActor
+    private func runStressTest() {
+        var cycle = 0
+        @MainActor func round() {
+            guard cycle < 3 else { return }
+            cycle += 1
+            statusItem?.runPanelTest(rounds: 10)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 13) {
+                ClipboardWindow.runTest(rounds: 10)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 50) {
+                    MainActor.assumeIsolated {
+                        Log.info("Stress round \(cycle): footprint \(Self.footprintMB()) MB", "stress")
+                        round()
+                    }
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            MainActor.assumeIsolated {
+                Log.info("Stress test start: footprint \(Self.footprintMB()) MB", "stress")
+                round()
+            }
+        }
+    }
+
+    /// The memory footprint, as Activity Monitor shows it.
+    static func footprintMB() -> String {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? String(format: "%.1f", Double(info.phys_footprint) / 1_048_576) : "?"
     }
 
     /// Opened again from Spotlight or Finder: show the panel (the icon may be hidden).
@@ -72,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !Self.isRunningTests else { return }
         // Caps Lock goes back to normal when Genius Switcher is not running.
         Observer.shared.stop()
+        ClipboardStore.shared.flush()
     }
 
     /// Right click on the icon, above "Завершить".
@@ -104,4 +155,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor @objc private func toggleAutoFix() { Observer.shared.autoFix.toggle() }
     @MainActor @objc private func togglePause() { Observer.shared.paused.toggle() }
+}
+
+/// Memory freed by a closed window goes back to macOS (malloc keeps it for reuse otherwise, and
+/// Activity Monitor goes on showing it).
+enum Memory {
+    @MainActor
+    static func giveBackSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            let freed = malloc_zone_pressure_relief(nil, 0)
+            Log.debug("Memory given back: \(freed / 1024) KB, footprint now \(AppDelegate.footprintMB()) MB", "memory")
+        }
+    }
 }

@@ -16,6 +16,7 @@ enum ClipboardWindow {
 
     private static var panel: KeyPanel?
     private static var preview: NSPanel?
+    private static var previewHost: NSHostingView<ClipboardPreview>?
     private static var monitor: Any?
     private static let model = ClipboardPanelModel()
 
@@ -48,12 +49,59 @@ enum ClipboardWindow {
         }
     }
 
+    /// Built and laid out ahead (the first build took ~165 ms, a visible jerk on the first opening).
+    static func prepare() {
+        guard panel == nil else { return }
+        let panel = makePanel()
+        Self.panel = panel
+        model.open()
+        panel.setContentSize(NSSize(width: width, height: height))
+        panel.contentView?.layoutSubtreeIfNeeded()
+        model.close()
+    }
+
     static func hide() {
         model.close()
         hidePreview()
-        panel?.orderOut(nil)
+        guard let panel, panel.isVisible else { return }
+        panel.orderOut(nil)
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        Memory.giveBackSoon()
+    }
+
+    /// `--history-test`: opens the history `rounds` times, moves down through it until the preview
+    /// opens, closes it; logs the longest main-thread stall (a stall = a jerk) and the footprint.
+    static func runTest(rounds: Int = 6) {
+        var round = 0
+        func next() {
+            guard round < rounds else { return }
+            round += 1
+            let start = CACurrentMediaTime()
+            var last = start
+            var longest = 0.0
+            var late = 0
+            let timer = Timer(timeInterval: 1.0 / 120, repeats: true) { _ in
+                let now = CACurrentMediaTime()
+                longest = max(longest, now - last)
+                if now - last > 0.025 { late += 1 }
+                last = now
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            show()
+            for step in 1...12 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 * Double(step)) { model.move(1) }
+            }
+            // The preview opens 1.5 s after the last move.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4 + previewDelay) {
+                timer.invalidate()
+                Log.info(String(format: "History test %d: longest stall %.1f ms, %d over 25 ms, footprint %@ MB",
+                                round, longest * 1000, late, AppDelegate.footprintMB()), "clipboard")
+                hide()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { next() }
+            }
+        }
+        next()
     }
 
     private struct Key: Sendable {
@@ -114,7 +162,14 @@ enum ClipboardWindow {
         let preview = preview ?? makePreview()
         Self.preview = preview
         let previewHeight = Self.previewHeight(item)
-        preview.contentView = Background(content: NSHostingView(rootView: ClipboardPreview(item: item, height: previewHeight)))
+        let content = ClipboardPreview(item: item, height: previewHeight)
+        if let previewHost {
+            previewHost.rootView = content
+        } else {
+            let host = NSHostingView(rootView: content)
+            previewHost = host
+            preview.contentView = Background(content: host)
+        }
         let frame = panel.frame
         let visible = (panel.screen ?? NSScreen.main)?.visibleFrame ?? frame
         let x = frame.maxX + previewWidth + 4 <= visible.maxX ? frame.maxX + 4 : frame.minX - previewWidth - 4
@@ -144,6 +199,7 @@ enum ClipboardWindow {
         preview.parent?.removeChildWindow(preview)
         preview.orderOut(nil)
         preview.contentView = nil  // its image goes with it
+        previewHost = nil
     }
 
     private static func makePreview() -> NSPanel {
@@ -378,7 +434,7 @@ private struct ClipboardRow: View {
     }
 }
 
-private struct ClipboardPreview: View {
+struct ClipboardPreview: View {
     let item: ClipboardItem
     let height: CGFloat
     private let store = ClipboardStore.shared
@@ -393,7 +449,7 @@ private struct ClipboardPreview: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             case .image:
-                if let image = store.thumbnail(item, maxPixels: Int(ClipboardWindow.previewWidth * 2)) {
+                if let image = store.previewImage(item, maxPixels: Int(ClipboardWindow.previewWidth * 2)) {
                     Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: 400)
                 }
             case .files:

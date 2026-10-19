@@ -87,6 +87,13 @@ settings): auto-fix, "Исправлять в «app»", Caps Lock, pause, a 3-li
 the last 7 days (per day; after midnight "today" starts empty), last fixes, journal open/delete.
 Right click on the menu bar icon: auto-fix, pause, exceptions, statistics, quit.
 
+Profiling (as in MXCtl): `--panel-test` (panel 6 times, longest main-thread stall), `--history-test`
+(history window, moving down until the preview opens), `--stress-test` (3 rounds of both, footprint
+per round: growing every round = a leak); `PROFILE=1 scripts/install.sh` signs with get-task-allow
+so `leaks`/`heap`/`malloc_history` can attach; `scripts/profile.py` for memory/CPU/wake-ups under
+load. Results and lessons: `MACCY-BASELINE.md`. Keep high-frequency state (`TypingStats`,
+`ClipboardStore.items`) out of what the panel observes: the kept panel re-renders even while hidden.
+
 Build and install: `scripts/install.sh`. Tests: `scripts/test.sh` (also removes the Debug app afterwards: a second copy with the same bundle ID steals the permissions).
 
 ## Menu bar icon

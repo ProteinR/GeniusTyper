@@ -16,7 +16,7 @@ enum StatsWindow {
     }
 
     private static func make() -> NSWindow {
-        let window = NSWindow(contentViewController: NSHostingController(rootView: StatsPanel().environmentObject(Observer.shared)))
+        let window = NSWindow(contentViewController: NSHostingController(rootView: StatsPanel().environmentObject(Observer.shared).environmentObject(Observer.shared.typing)))
         window.styleMask = [.titled, .closable]
         window.title = "Статистика"
         window.isReleasedWhenClosed = false
@@ -26,6 +26,7 @@ enum StatsWindow {
 
 private struct StatsPanel: View {
     @EnvironmentObject private var observer: Observer
+    @EnvironmentObject private var typing: TypingStats
     @State private var confirmDelete = false
     @AppStorage("statsShowWeek") private var showWeek = false
 
@@ -38,13 +39,13 @@ private struct StatsPanel: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(width: 170)
-            StatsView(stats: showWeek ? observer.weekStats : observer.stats)
+            StatsView(stats: showWeek ? typing.weekStats : typing.stats)
 
-            if !observer.recentFixes.isEmpty {
+            if !typing.recentFixes.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Последние исправления (только здесь, не сохраняются)")
                         .font(.caption).foregroundStyle(.secondary)
-                    ForEach(observer.recentFixes, id: \.self) { Text($0).font(.callout.monospaced()) }
+                    ForEach(typing.recentFixes, id: \.self) { Text($0).font(.callout.monospaced()) }
                 }
             }
 

@@ -11,7 +11,13 @@ xcodebuild -project GeniusSwitcher.xcodeproj -scheme GeniusSwitcher -configurati
 # certificate, not the build hash, so the Input Monitoring permission survives rebuilds.
 IDENTITY="dmemruk Local Code Signing"
 if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
-  codesign --force --deep -s "$IDENTITY" "$PRODUCT"
+  # PROFILE=1: also allow attaching tools (leaks, Instruments allocations); same certificate, so
+  # the permissions stay.
+  if [ "${PROFILE:-0}" = "1" ]; then
+    codesign --force --deep -s "$IDENTITY" --entitlements scripts/profile.entitlements "$PRODUCT"
+  else
+    codesign --force --deep -s "$IDENTITY" "$PRODUCT"
+  fi
 else
   echo "warning: certificate '$IDENTITY' not found; app stays ad-hoc signed and permissions reset on every rebuild" >&2
 fi

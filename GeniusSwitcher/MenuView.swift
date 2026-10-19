@@ -102,15 +102,7 @@ private struct ClipboardSettings: View {
                     }
                     GridRow {
                         Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
-                        HStack(spacing: 8) {
-                            Text("занято \(ByteCountFormatter.string(fromByteCount: Int64(clipboard.totalBytes), countStyle: .file)), \(clipboard.items.count) зап.")
-                                .foregroundStyle(.secondary)
-                            Button("Очистить…") { confirmClear = true }
-                                .buttonStyle(.link)
-                                .disabled(clipboard.items.isEmpty)
-                        }
-                        .font(.caption)
-                        .fixedSize()
+                        ClipboardUsageLine(usage: clipboard.usage) { confirmClear = true }
                     }
                 }
                 .padding(.leading, 20)
@@ -148,6 +140,10 @@ private struct HotKeyRecorder: View {
         }
         .help("Нажмите и введите новое сочетание: нужна ⌘, ⌥ или ⌃. Esc — отмена")
         .onDisappear { if recording { stop() } }
+        // The panel closed (Esc, a click elsewhere) while recording: the old shortcut comes back.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
+            if recording { stop() }
+        }
     }
 
     private func start() {
@@ -177,5 +173,23 @@ private struct HotKeyRecorder: View {
         monitor = nil
         recording = false
         clipboard.registerHotKey()
+    }
+}
+
+/// "занято 1,5 МБ, 70 зап. Очистить…": the only part of the panel that changes with every copy.
+private struct ClipboardUsageLine: View {
+    @ObservedObject var usage: ClipboardUsage
+    let clear: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("занято \(ByteCountFormatter.string(fromByteCount: Int64(usage.value.bytes), countStyle: .file)), \(usage.value.count) зап.")
+                .foregroundStyle(.secondary)
+            Button("Очистить…", action: clear)
+                .buttonStyle(.link)
+                .disabled(usage.value.count == 0)
+        }
+        .font(.caption)
+        .fixedSize()
     }
 }
