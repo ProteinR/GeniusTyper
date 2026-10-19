@@ -21,10 +21,15 @@ enum KeyPoster {
         }
     }
 
-    private static func post(source: CGEventSource?, keyCode: CGKeyCode, text: String?) {
+    /// ⌘V: pastes what the clipboard history has just put on the pasteboard.
+    static func pressPaste() {
+        post(source: CGEventSource(stateID: .privateState), keyCode: 9, text: nil, flags: .maskCommand)
+    }
+
+    private static func post(source: CGEventSource?, keyCode: CGKeyCode, text: String?, flags: CGEventFlags = []) {
         for down in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: down) else { continue }
-            event.flags = []
+            event.flags = flags
             event.setIntegerValueField(.eventSourceUserData, value: marker)
             if let text {
                 let units = Array(text.utf16)

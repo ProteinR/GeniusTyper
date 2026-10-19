@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             content: { AnyView(MenuView().environmentObject(Observer.shared)) },
             menuItems: { [weak self] in self?.contextMenuItems() ?? [] })
         Observer.shared.start()
+        ClipboardStore.shared.start()
     }
 
     /// Opened again from Spotlight or Finder: show the panel (the icon may be hidden).
@@ -86,12 +87,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         exceptions.target = self
         let stats = NSMenuItem(title: "Статистика…", action: #selector(showStats), keyEquivalent: "")
         stats.target = self
-        return [auto, pause, .separator(), exceptions, stats]
+        var items = [auto, pause, .separator(), exceptions, stats]
+        if ClipboardStore.shared.enabled {
+            let history = NSMenuItem(title: "История буфера", action: #selector(showClipboard), keyEquivalent: "")
+            history.target = self
+            items.append(history)
+        }
+        return items
     }
 
     @MainActor @objc private func showStats() { StatsWindow.show() }
 
     @MainActor @objc private func showExceptions() { ExceptionsEditor.show() }
+
+    @MainActor @objc private func showClipboard() { ClipboardWindow.show() }
 
     @MainActor @objc private func toggleAutoFix() { Observer.shared.autoFix.toggle() }
     @MainActor @objc private func togglePause() { Observer.shared.paused.toggle() }

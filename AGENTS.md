@@ -33,6 +33,17 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   dfc = «вас», left out). Tab "Приложения": "Не исправлять в" (`autoOffApps`) and "Не следить в"
   (`excludedApps`), added from the current app, running apps or Finder. Older undos (before 0.3.0)
   added hashes of the key codes (`FixExceptions`, no text): still honoured, "Сбросить" clears them.
+- **Clipboard history** (replaces Maccy, 2026-10-19; `ClipboardStore.swift`, `ClipboardItem.swift`
+  = pure rules, tested, `ClipboardWindow.swift`, `HotKey.swift`): ⇧⌘C (Carbon hot key, key code, works
+  in any layout) opens a non-activating panel at the pointer: search (also in the wrong layout:
+  "ghbdtn" finds "привет"), list with app icons, preview beside it after 1.5 s. ⏎ pastes (⌘V posted
+  to the app in front, needs Accessibility), ⌥⏎ copies only, ⇧⏎ without formatting, ⌘1…9, ⌥⌫
+  deletes. Polls `changeCount` every 0.5 s. Keeps text (+ RTF/HTML), images (TIFF saved as PNG) and
+  files, same content moves to the top; limit in MB (panel: 50/100/200/500, default 100) plus 1000
+  entries. Skips password managers, "Не следить в" apps, nspasteboard.org private/transient types
+  and seed phrases (Maccy's regex). Stored in `~/Library/Application Support/GeniusSwitcher/clipboard/`
+  (`index.json` with texts + one folder per entry). Measured against Maccy: `MACCY-BASELINE.md`.
+  Maccy must not run at the same time (both take ⇧⌘C; the second registration does not fail).
 - **Watches typing, listen-only** (`Observer.swift`, Input Monitoring permission). Clicks, arrows, ⌘/⌃ shortcuts and app switches reset the tracked line.
 - `WordTracker.swift` (pure, tested): keys → finished words and *rewrites* (erase, then retype).
   Words are kept as physical keys, so "ghbdtn" and "привет" are the same keys in two layouts.
@@ -51,6 +62,7 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
 
 ## Privacy rule
 
+The clipboard history is the exception: it stores what was copied (that is its job), locally only.
 The journal never contains text: only layouts, lengths, verdicts, timings and the app bundle ID
 (`JournalEntry`; a test checks that words do not reach the JSON). Letters exist only in memory while
 a word is typed; the menu shows the last 5 fixes as text from memory only. Password managers are
@@ -64,7 +76,7 @@ Log: `~/Library/Logs/GeniusSwitcher/geniusswitcher.log`.
 Analyse the journal (how often, which apps, early vs late fixes, auto-fixes undone, detector
 caught/missed/false alarms by word length) and improve the detector (letter trigrams); fixing
 mid-word; manual exceptions; a "convert last word / selection" hotkey; later possibly merge
-Genius Switcher, MonitorCtl and a clipboard history into one app.
+MonitorCtl into this app too.
 
 The panel is kept short on purpose (compared with Caramba / Lang Switcher, which have almost no
 settings): auto-fix, "Исправлять в «app»", Caps Lock, pause, a 3-line key hint, buttons

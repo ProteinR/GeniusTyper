@@ -4,6 +4,7 @@ import SwiftUI
 /// lists of words and apps in the "Исключения" window.
 struct MenuView: View {
     @EnvironmentObject private var observer: Observer
+    @ObservedObject private var clipboard = ClipboardStore.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -40,6 +41,7 @@ struct MenuView: View {
                     set: { observer.setAutoOff(app.id, !$0) }))
             }
             Toggle("Caps Lock переключает раскладку", isOn: $observer.capsLockSwitching)
+            ClipboardSettings(clipboard: clipboard)
             Toggle("Пауза", isOn: $observer.paused)
             MenuBarIconStylePicker()
 
@@ -68,5 +70,43 @@ struct MenuView: View {
         }
         .padding(14)
         .frame(width: 340)
+    }
+}
+
+/// "История буфера обмена (⇧⌘C)" and its size limit.
+private struct ClipboardSettings: View {
+    @ObservedObject var clipboard: ClipboardStore
+    @State private var confirmClear = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle("История буфера обмена (⇧⌘C)", isOn: $clipboard.enabled)
+            if clipboard.enabled {
+                HStack(spacing: 6) {
+                    Picker("Хранить до", selection: $clipboard.limitMB) {
+                        ForEach(ClipboardStore.limits, id: \.self) { Text("\($0) МБ").tag($0) }
+                    }
+                    .fixedSize()
+                    Text("занято \(ByteCountFormatter.string(fromByteCount: Int64(clipboard.totalBytes), countStyle: .file)), \(clipboard.items.count) зап.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Очистить…") { confirmClear = true }
+                        .controlSize(.small)
+                        .disabled(clipboard.items.isEmpty)
+                }
+                .padding(.leading, 20)
+                if clipboard.hotKeyTaken {
+                    Label("⇧⌘C занято другим приложением (Maccy?): закройте его и выключите-включите историю",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.leading, 20)
+                }
+            }
+        }
+        .alert("Очистить историю буфера?", isPresented: $confirmClear) {
+            Button("Очистить", role: .destructive) { clipboard.clear() }
+            Button("Отмена", role: .cancel) {}
+        }
     }
 }

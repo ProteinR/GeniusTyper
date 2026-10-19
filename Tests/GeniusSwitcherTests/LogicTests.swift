@@ -351,3 +351,57 @@ final class AutoFixTests: XCTestCase {
         XCTAssertTrue(recorder.expire(now: 200).isEmpty)
     }
 }
+
+final class ClipboardTests: XCTestCase {
+    private func item(_ text: String, bytes: Int = 0, kind: ClipboardItem.Kind = .text) -> ClipboardItem {
+        ClipboardItem(id: UUID(), date: Date(), kind: kind, app: nil, text: text,
+                      stored: bytes > 0 ? ["public.rtf": bytes] : [:], hash: "\(kind):\(text)")
+    }
+
+    func testNewestOnTopAndSameContentMoves() {
+        var items: [ClipboardItem] = []
+        for text in ["a", "b", "c"] { items = ClipboardRules.insert(item(text), into: items, limit: 1000).items }
+        XCTAssertEqual(items.map(\.text), ["c", "b", "a"])
+        let again = ClipboardRules.insert(item("a"), into: items, limit: 1000)
+        XCTAssertEqual(again.items.map(\.text), ["a", "c", "b"])
+        XCTAssertEqual(again.removed.map(\.text), ["a"])
+    }
+
+    func testSizeLimitDropsOldest() {
+        var items: [ClipboardItem] = []
+        for text in ["1", "2", "3"] { items = ClipboardRules.insert(item(text, bytes: 399), into: items, limit: 1000).items }
+        // 400 bytes each (399 + 1 letter): two fit in 1000.
+        XCTAssertEqual(items.map(\.text), ["3", "2"])
+        // An entry bigger than the limit still stays, alone.
+        let big = ClipboardRules.insert(item("big", bytes: 5000), into: items, limit: 1000)
+        XCTAssertEqual(big.items.map(\.text), ["big"])
+        XCTAssertEqual(big.removed.count, 2)
+    }
+
+    func testSeedPhrasesAreSecret() {
+        let words = Array(repeating: "abandon", count: 11) + ["about"]
+        XCTAssertTrue(ClipboardRules.isSecret(words.joined(separator: " ")))
+        XCTAssertFalse(ClipboardRules.isSecret("git push origin main"))
+    }
+
+    func testSearchAllWordsAnyCase() {
+        let entry = item("Привет, мир! Hello World")
+        XCTAssertTrue(ClipboardRules.matches(entry, query: "hello мир", alternative: nil))
+        XCTAssertFalse(ClipboardRules.matches(entry, query: "hello bye", alternative: nil))
+    }
+
+    func testSearchInWrongLayout() {
+        let renderer = FakeLayouts()
+        XCTAssertEqual(ClipboardRules.retyped("ghbdtn", renderer: renderer), "привет")
+        XCTAssertEqual(ClipboardRules.retyped("ПРИВЕТ", renderer: renderer), "GHBDTN")
+        XCTAssertNil(ClipboardRules.retyped("123", renderer: renderer))
+        let entry = item("скажи привет")
+        let alternative = ClipboardRules.retyped("ghbdtn", renderer: renderer)
+        XCTAssertTrue(ClipboardRules.matches(entry, query: "ghbdtn", alternative: alternative))
+    }
+
+    func testTitles() {
+        XCTAssertEqual(item("  first\nsecond  ").title, "first ⏎ second")
+        XCTAssertEqual(item("/a/b.txt\n/c/d.png", kind: .files).title, "b.txt и ещё 1")
+    }
+}
