@@ -22,13 +22,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var statusItem: StatusItemController?
 
+    /// "G" (Genius) with a text cursor, like SF Symbols' "character.cursor.ibeam" ("A" with a cursor).
+    static let menuBarImage: NSImage = {
+        let font = NSFont.systemFont(ofSize: 15, weight: .medium)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
+        let letter = "G" as NSString
+        let letterSize = letter.size(withAttributes: attributes)
+        let size = NSSize(width: ceil(letterSize.width) + 5, height: 16)
+        let image = NSImage(size: size, flipped: false) { rect in
+            letter.draw(at: NSPoint(x: 0, y: (rect.height - letterSize.height) / 2), withAttributes: attributes)
+            // The I-beam: a stem with short serifs, the height of the capital letter and a bit more.
+            let x = rect.width - 2
+            let beam = NSBezierPath()
+            beam.move(to: NSPoint(x: x, y: 1.5)); beam.line(to: NSPoint(x: x, y: rect.height - 1.5))
+            beam.move(to: NSPoint(x: x - 1.75, y: 1)); beam.line(to: NSPoint(x: x + 1.75, y: 1))
+            beam.move(to: NSPoint(x: x - 1.75, y: rect.height - 1)); beam.line(to: NSPoint(x: x + 1.75, y: rect.height - 1))
+            beam.lineWidth = 1.25
+            NSColor.black.setStroke()
+            beam.stroke()
+            return true
+        }
+        image.isTemplate = true
+        image.accessibilityDescription = "Genius Switcher"
+        return image
+    }()
+
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !Self.isRunningTests else { return }
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         Log.info("Genius Switcher \(Self.appVersion) (\(build)) started")
         statusItem = StatusItemController(
-            symbol: "character.cursor.ibeam", title: "Genius Switcher",
+            image: Self.menuBarImage, title: "Genius Switcher",
             content: { AnyView(MenuView().environmentObject(Observer.shared)) },
             menuItems: { [weak self] in self?.contextMenuItems() ?? [] })
         Observer.shared.start()

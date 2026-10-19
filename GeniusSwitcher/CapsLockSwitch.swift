@@ -7,7 +7,8 @@ import IOKit.hid
 /// switches to ABC" waits to tell a press from a hold and misses quick ones).
 ///
 /// Caps Lock is remapped to F18 for the session with `hidutil` (like Karabiner, no driver, gone
-/// after a restart); F18 does nothing on its own, so a listen-only key tap sees it and switches.
+/// after a restart); F18 does nothing on its own; the key tap sees it and switches (and, with Accessibility,
+/// swallows it: text fields beep at an unknown key).
 /// ⇧ + Caps Lock toggles the real Caps Lock. The mapping is removed when Genius Switcher quits.
 enum CapsLockSwitch {
     static let f18KeyCode: UInt16 = 79

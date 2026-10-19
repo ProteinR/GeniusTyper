@@ -12,7 +12,8 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
 
 - **Caps Lock switches the layout** instantly on every press (`CapsLockSwitch.swift`): Caps Lock is
   remapped to F18 with `hidutil` (session only, removed on quit), F18 in the key tap selects the other
-  layout with `TISSelectInputSource`. ⇧ + Caps Lock toggles the real Caps Lock. One rule: Caps Lock
+  layout with `TISSelectInputSource`. F18 is swallowed by a small filtering tap (needs
+  Accessibility): apps beeped at it on every press (2026-10-19). ⇧ + Caps Lock toggles the real Caps Lock. One rule: Caps Lock
   makes the text be in the other layout. Right after an auto-fix it undoes it; in the middle of a
   word (letters typed, no separator yet) it retypes those letters in the other layout and switches
   (`retypeCurrentWord`, journal `capsFix`), the word goes on as one word; otherwise it only switches.
@@ -80,6 +81,13 @@ right click = menu with "Завершить". Not SwiftUI's `MenuBarExtra`: when
 System Settings → Menu Bar, a `MenuBarExtra`-only app quits right after launch (MonitorCtl did, so
 its keys silently stopped working, and the unit tests' host quit too). With an `NSStatusItem` the
 app keeps running; opening it again from Spotlight/Finder shows the panel in a small window.
+
+Genius Switcher's icon is drawn in code (`AppDelegate.menuBarImage`): "G" with a text cursor (it
+was SF Symbols' "A" with a cursor). Panel "Язык на значке: нет / RU / EN / флаг" + "с иконкой"
+(`MenuBarIcon.LanguageMark`, `showsSymbol`): with the icon the language is small at its right
+(text ~10.5 pt in the image; a flag is a 14 pt title, emoji flags look smaller than text), without
+it the language is the whole icon ("RU" in a frame, or a flag). Meant to replace macOS's own input
+menu (System Settings → Keyboard → Input Sources).
 
 ## Versions
 

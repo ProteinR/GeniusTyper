@@ -68,6 +68,8 @@ final class Observer: ObservableObject {
     private var recorder: Recorder
     private let journal = Journal()
     private var tap: CFMachPort?
+    /// Swallows F18 (Caps Lock) so the focused app does not beep at an unknown key; needs Accessibility.
+    private var capsTap: CFMachPort?
     private var timers: [Timer] = []
     private var currentApp: String?
     private var lastKeyTime: TimeInterval = 0
@@ -106,6 +108,7 @@ final class Observer: ObservableObject {
         Journal.load(Date()).forEach { stats.add($0) }
         loadWeek()
         knownLanguage = layouts.currentLanguage()
+        MenuBarIcon.shared.language = knownLanguage
         currentApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         if capsLockSwitching { CapsLockSwitch.install() }
         write([JournalEntry(t: Date(), kind: .start)])
@@ -138,6 +141,7 @@ final class Observer: ObservableObject {
                 if can != self.canPost {
                     self.canPost = can
                     Log.info("Accessibility (typing for auto-fix): \(can ? "granted" : "revoked")", "auto")
+                    if can && self.hasPermission { self.installCapsTap() }
                 }
             }
         })
@@ -230,6 +234,42 @@ final class Observer: ObservableObject {
         CFRunLoopAddSource(CFRunLoopGetMain(), CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0), .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         Log.info("Key tap installed; layouts \(layouts.summary)", "keys")
+        installCapsTap()
+    }
+
+    /// A filtering tap ahead of the listen-only one, for F18 only: handles it and drops it, so it
+    /// never reaches the app (text fields beep at F18). Without Accessibility it cannot be made;
+    /// the listen-only tap then handles F18 and the app may beep.
+    private func installCapsTap() {
+        guard capsTap == nil else { return }
+        let mask = CGEventMask(1) << CGEventMask(CGEventType.keyDown.rawValue) | CGEventMask(1) << CGEventMask(CGEventType.keyUp.rawValue)
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
+            let observer = Unmanaged<Observer>.fromOpaque(refcon!).takeUnretainedValue()
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                MainActor.assumeIsolated { if let tap = observer.capsTap { CGEvent.tapEnable(tap: tap, enable: true) } }
+                return Unmanaged.passUnretained(event)
+            }
+            guard UInt16(event.getIntegerValueField(.keyboardEventKeycode)) == CapsLockSwitch.f18KeyCode,
+                  event.getIntegerValueField(.eventSourceUserData) != KeyPoster.marker else {
+                return Unmanaged.passUnretained(event)
+            }
+            let swallow = MainActor.assumeIsolated { () -> Bool in
+                guard observer.capsLockSwitching else { return false }
+                if type == .keyDown { observer.handle(type: type, event: event) }
+                return true
+            }
+            return swallow ? nil : Unmanaged.passUnretained(event)
+        }
+        guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+                                          eventsOfInterest: mask, callback: callback,
+                                          userInfo: Unmanaged.passUnretained(self).toOpaque()) else {
+            Log.warning("Cannot create the Caps Lock tap (Accessibility missing?): F18 may beep", "caps")
+            return
+        }
+        capsTap = tap
+        CFRunLoopAddSource(CFRunLoopGetMain(), CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0), .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        Log.info("Caps Lock tap installed (F18 swallowed)", "caps")
     }
 
     private func handle(type: CGEventType, event: CGEvent) {
@@ -418,6 +458,7 @@ final class Observer: ObservableObject {
 
     private func layoutChanged() {
         let language = layouts.currentLanguage()
+        MenuBarIcon.shared.language = language
         guard let language, language != knownLanguage else { return }
         let now = Date().timeIntervalSince1970
         let previous = knownLanguage

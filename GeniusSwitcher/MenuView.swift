@@ -41,6 +41,7 @@ struct MenuView: View {
             }
             Toggle("Caps Lock переключает раскладку", isOn: $observer.capsLockSwitching)
             Toggle("Пауза", isOn: $observer.paused)
+            MenuBarIconStylePicker()
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("**⇧ + пробел** — не исправлять слово")
