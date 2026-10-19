@@ -57,8 +57,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let pause = NSMenuItem(title: "Пауза наблюдения", action: #selector(togglePause), keyEquivalent: "")
         pause.target = self
         pause.state = observer.paused ? .on : .off
-        return [auto, pause]
+        let exceptions = NSMenuItem(title: "Исключения…", action: #selector(showExceptions), keyEquivalent: "")
+        exceptions.target = self
+        let stats = NSMenuItem(title: "Статистика…", action: #selector(showStats), keyEquivalent: "")
+        stats.target = self
+        return [auto, pause, .separator(), exceptions, stats]
     }
+
+    @MainActor @objc private func showStats() { StatsWindow.show() }
+
+    @MainActor @objc private func showExceptions() { ExceptionsEditor.show() }
 
     @MainActor @objc private func toggleAutoFix() { Observer.shared.autoFix.toggle() }
     @MainActor @objc private func togglePause() { Observer.shared.paused.toggle() }

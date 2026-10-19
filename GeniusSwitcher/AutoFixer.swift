@@ -76,6 +76,15 @@ struct UserExceptions: Equatable {
 
     var text: String { words.joined(separator: "\n") }
 
+    /// Several words at once are fine ("rtl, ctx").
+    mutating func add(_ text: String) {
+        self = UserExceptions(words: words + UserExceptions(text: text).words)
+    }
+
+    mutating func remove(_ word: String) {
+        words.removeAll { $0 == word }
+    }
+
     func contains(_ word: String) -> Bool {
         Self.normalize(word).map { words.contains($0) } ?? false
     }
@@ -88,6 +97,20 @@ struct UserExceptions: Equatable {
     static func normalize(_ word: String) -> String? {
         let core = word.trimmingCharacters(in: CharacterSet.letters.inverted).lowercased()
         return core.isEmpty ? nil : core
+    }
+}
+
+/// Counts how often the user kept a word the auto-fixer wanted to fix (⇧+Space), to suggest adding
+/// it to the exceptions. Memory only, keyed by `FixExceptions.hash`.
+struct SkipCounter {
+    static let threshold = 2
+    private var counts: [String: Int] = [:]
+
+    /// True when the word reached the threshold (then it starts over).
+    mutating func register(_ hash: String) -> Bool {
+        let count = counts[hash, default: 0] + 1
+        counts[hash] = count < Self.threshold ? count : 0
+        return count >= Self.threshold
     }
 }
 

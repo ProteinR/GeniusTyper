@@ -7,6 +7,11 @@ struct JournalEntry: Codable, Equatable {
         case word, rewrite, flagKept, start, pause, resume
         /// Genius Switcher fixed a word itself / the user undid that with Caps Lock.
         case autoFix, autoUndo
+        /// A word the auto-fixer would fix, ended with ⇧+Space: the user kept it on purpose.
+        case autoSkip
+        /// Caps Lock in the middle of a word: the letters typed so far were retyped in the other
+        /// layout (the user noticed the wrong layout before the detector could).
+        case capsFix
         case switchLayout = "switch"
     }
 
@@ -70,6 +75,8 @@ struct DayStats: Equatable {
     var midWordSwitches = 0
     var autoFixes = 0
     var autoUndos = 0
+    var autoSkips = 0
+    var capsFixes = 0
 
     mutating func add(_ entry: JournalEntry) {
         switch entry.kind {
@@ -94,6 +101,10 @@ struct DayStats: Equatable {
             autoFixes += 1
         case .autoUndo:
             autoUndos += 1
+        case .autoSkip:
+            autoSkips += 1
+        case .capsFix:
+            capsFixes += 1
         case .start, .pause, .resume:
             break
         }

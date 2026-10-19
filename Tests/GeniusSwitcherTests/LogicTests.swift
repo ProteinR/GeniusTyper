@@ -146,6 +146,20 @@ final class WordTrackerTests: XCTestCase {
         XCTAssertEqual(words(space()).first?.mixed, true)
     }
 
+    func testCurrentWordRetypedMidWordStaysOneWord() {
+        type([5, 4, 11], "en")
+        XCTAssertEqual(tracker.currentWord?.keys.count, 3)
+        XCTAssertEqual(tracker.currentWord?.language, "en")
+        tracker.retypeCurrentWord(in: "ru")
+        type([2, 17, 45], "ru")
+        let finished = words(space())
+        XCTAssertEqual(finished.count, 1)
+        XCTAssertEqual(finished.first?.keys.count, 6)
+        XCTAssertEqual(finished.first?.language, "ru")
+        XCTAssertEqual(finished.first?.mixed, false)
+        XCTAssertNil(tracker.currentWord)
+    }
+
     func testResetFinishesOpenRewrite() {
         type(privet, "en")
         backspaces(6)
@@ -275,6 +289,15 @@ final class AutoFixTests: XCTestCase {
         XCTAssertFalse(stored.contains("5,4"))
     }
 
+    func testAbbreviationsAreSkipped() {
+        XCTAssertTrue(LayoutDetector.isAbbreviation("RTL"))
+        XCTAssertTrue(LayoutDetector.isAbbreviation("ГОСТ"))
+        XCTAssertFalse(LayoutDetector.isAbbreviation("Rtl"))
+        XCTAssertFalse(LayoutDetector.isAbbreviation("GHBDTN"))
+        let caps = privet.map { TypedKey(code: $0, shift: true, caps: false) }
+        XCTAssertEqual(detector.verdict(Array(caps.prefix(3)), language: "en", renderer: FakeLayouts()), .skip)
+    }
+
     func testUserExceptions() {
         let exceptions = UserExceptions(text: "Привет\n  ok, git;\n\n(кто-то)\nprivet\nпривет")
         XCTAssertEqual(exceptions.words, ["git", "ok", "privet", "кто-то", "привет"])
@@ -284,6 +307,24 @@ final class AutoFixTests: XCTestCase {
         XCTAssertTrue(exceptions.contains(FakeLayouts.keys(privet), language: "ru", renderer: FakeLayouts()))
         XCTAssertFalse(exceptions.contains(FakeLayouts.keys(privet), language: "en", renderer: FakeLayouts()))
         XCTAssertTrue(exceptions.contains(FakeLayouts.keys(privet + [44]), language: "ru", renderer: FakeLayouts()))
+    }
+
+    func testUserExceptionsAddRemove() {
+        var exceptions = UserExceptions(words: ["rtl"])
+        exceptions.add("Ctx, rtl")
+        XCTAssertEqual(exceptions.words, ["ctx", "rtl"])
+        exceptions.remove("rtl")
+        XCTAssertEqual(exceptions.words, ["ctx"])
+    }
+
+    func testSkipCounterSuggestsOnSecondSkip() {
+        var counter = SkipCounter()
+        XCTAssertFalse(counter.register("a"))
+        XCTAssertFalse(counter.register("b"))
+        XCTAssertTrue(counter.register("a"))
+        // Starts over after a suggestion.
+        XCTAssertFalse(counter.register("a"))
+        XCTAssertTrue(counter.register("a"))
     }
 
     func testNoFixAfterEnterOrReset() {

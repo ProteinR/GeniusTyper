@@ -79,6 +79,7 @@ final class Observer: ObservableObject {
     /// Logged once per launch, the mismatch itself is expected after every auto-switch.
     private var loggedEventMismatch = false
     private var lastFix: LastFix?
+    private var skips = SkipCounter()
     private var exceptions: FixExceptions {
         didSet {
             UserDefaults.standard.set(Array(exceptions.hashes), forKey: "fixExceptions")
@@ -186,9 +187,13 @@ final class Observer: ObservableObject {
         exceptions = FixExceptions()
     }
 
-    func setUserExceptions(_ text: String) {
-        userExceptions = UserExceptions(text: text)
-        Log.info("User exceptions saved (\(userExceptions.words.count) words)", "auto")
+    func addUserException(_ text: String) {
+        userExceptions.add(text)
+        Log.info("User exceptions: \(userExceptions.words.count) words", "auto")
+    }
+
+    func removeUserException(_ word: String) {
+        userExceptions.remove(word)
     }
 
     func setExcluded(_ bundleID: String, _ excluded: Bool) {
@@ -248,6 +253,8 @@ final class Observer: ObservableObject {
                 CapsLockSwitch.toggleCapsLock()
             } else if undoLastFix() {
                 return
+            } else if retypeCurrentWord() {
+                return
             } else {
                 capsSwitchTime = Date().timeIntervalSince1970
                 CapsLockSwitch.switchLayout(renderer: layouts)
@@ -305,12 +312,16 @@ final class Observer: ObservableObject {
             outputs = tracker.key(key, typed: typed, language: language, time: now)
         }
         write(recorder.record(outputs, app: currentApp))
-        if let separator { autoFixIfNeeded(outputs, separator: separator, time: now) }
+        if let separator {
+            // ⇧+Space: a plain space, the word stays as typed.
+            let keep = code == 49 && flags.contains(.maskShift)
+            autoFixIfNeeded(outputs, separator: separator, keep: keep, time: now)
+        }
     }
 
     // MARK: - Auto-fix
 
-    private func autoFixIfNeeded(_ outputs: [TrackerOutput], separator: (key: TypedKey, typed: String), time: TimeInterval) {
+    private func autoFixIfNeeded(_ outputs: [TrackerOutput], separator: (key: TypedKey, typed: String), keep: Bool, time: TimeInterval) {
         guard autoFix, canPost, !(currentApp.map(autoOffApps.contains) ?? false) else { return }
         guard let word = outputs.lazy.compactMap({ output -> FinishedWord? in
             if case let .word(word) = output { return word } else { return nil }
@@ -321,6 +332,17 @@ final class Observer: ObservableObject {
               !userExceptions.contains(word.keys, language: word.language, renderer: layouts),
               LayoutDetector.system.verdict(word.keys, language: word.language, renderer: layouts, trimEdges: false) == .fix
         else { return }
+
+        if keep {
+            var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .autoSkip, app: currentApp)
+            entry.from = word.language
+            entry.len = word.keys.count
+            write([entry])
+            if skips.register(FixExceptions.hash(word.keys, language: word.language)) {
+                suggestException(word.keys, language: word.language)
+            }
+            return
+        }
 
         let original = layouts.text(word.keys, language: word.language) + separator.typed
         let fixedSeparator = layouts.character(separator.key, language: target).map(String.init) ?? separator.typed
@@ -345,7 +367,7 @@ final class Observer: ObservableObject {
     }
 
     /// Caps Lock right after an auto-fix, before any other key: puts the word back, returns to the
-    /// original layout and never fixes that word again.
+    /// original layout and offers to add the word to the exceptions.
     private func undoLastFix() -> Bool {
         let now = Date().timeIntervalSince1970
         guard let fix = lastFix, now - fix.time < LastFix.undoWindow, lastKeyTime <= fix.time else { return false }
@@ -353,14 +375,45 @@ final class Observer: ObservableObject {
         capsSwitchTime = now
         KeyPoster.replace(deleting: fix.fixed.count, with: fix.original)
         CapsLockSwitch.select(fix.originalLanguage, renderer: layouts)
-        exceptions.add(fix.keys, language: fix.originalLanguage)
+        suggestException(fix.keys, language: fix.originalLanguage)
         var entry = JournalEntry(t: Date(), kind: .autoUndo, app: currentApp)
         entry.from = fix.fixedLanguage
         entry.to = fix.originalLanguage
         entry.len = fix.keys.count
         write([entry])
-        Log.info("Auto-fix undone, word added to exceptions (\(exceptions.hashes.count))", "auto")
+        Log.info("Auto-fix undone", "auto")
         return true
+    }
+
+    /// Caps Lock in the middle of a word: the letters typed so far are retyped in the other layout
+    /// and the layout is switched, so the word goes on in the right one.
+    private func retypeCurrentWord() -> Bool {
+        guard canPost, !paused, !isExcluded, let word = tracker.currentWord,
+              let target = layouts.other(than: word.language) else { return false }
+        let typed = layouts.text(word.keys, language: word.language)
+        let retyped = layouts.text(word.keys, language: target)
+        guard typed.count == word.keys.count, retyped.count == word.keys.count else { return false }
+        let now = Date().timeIntervalSince1970
+        capsSwitchTime = now
+        lastFix = nil
+        KeyPoster.replace(deleting: typed.count, with: retyped)
+        CapsLockSwitch.select(target, renderer: layouts)
+        tracker.retypeCurrentWord(in: target)
+        var entry = JournalEntry(t: Date(timeIntervalSince1970: now), kind: .capsFix, app: currentApp)
+        entry.from = word.language
+        entry.to = target
+        entry.len = word.keys.count
+        write([entry])
+        Log.debug("Caps Lock mid-word: \(word.keys.count) keys retyped \(word.language)→\(target)", "auto")
+        return true
+    }
+
+    /// A small window that does not take the focus: "«rtl» — в исключения?". The word exists only
+    /// in memory until the user adds it.
+    private func suggestException(_ keys: [TypedKey], language: String) {
+        guard let word = UserExceptions.normalize(layouts.text(keys, language: language)),
+              !userExceptions.contains(word) else { return }
+        ExceptionSuggestion.show(word: word) { self.addUserException(word) }
     }
 
     private func layoutChanged() {

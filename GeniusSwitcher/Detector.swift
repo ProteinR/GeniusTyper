@@ -38,7 +38,7 @@ struct LayoutDetector {
         guard core.count >= 2 else { return .skip }
         let typed = renderer.text(core, language: language)
         let alternative = renderer.text(core, language: other)
-        if Self.isMixedCase(typed) { return .skip }
+        if Self.isMixedCase(typed) || Self.isAbbreviation(typed) { return .skip }
 
         let typedValid = Self.isScript(typed, language) && isWord(typed, language)
         let otherValid = Self.isScript(alternative, other) && isWord(alternative, other)
@@ -58,6 +58,13 @@ struct LayoutDetector {
             default: return false
             }
         }
+    }
+
+    /// "RTL", "DTO", "API": all capitals, 2–5 letters, typed on purpose. "КЕД" for "RTL" is a word,
+    /// so without this rule abbreviations get "fixed".
+    static func isAbbreviation(_ word: String) -> Bool {
+        let letters = word.filter(\.isLetter)
+        return (2...5).contains(letters.count) && letters.allSatisfy(\.isUppercase)
     }
 
     /// "camelCase", "iPhone": typed on purpose, not judged. "Hello" and "NASA" are fine.

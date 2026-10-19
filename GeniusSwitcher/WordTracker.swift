@@ -139,6 +139,31 @@ struct WordTracker {
         return "wordStart"
     }
 
+    /// The word being typed (keys since the last separator), when all in one layout and not
+    /// erasing. For Caps Lock in the middle of a word.
+    var currentWord: (keys: [TypedKey], language: String)? {
+        guard erasing == nil else { return nil }
+        var keys: [TypedKey] = []
+        var languages: Set<String> = []
+        for item in line.reversed() {
+            guard case let .key(key, language, _, _) = item else { break }
+            keys.insert(key, at: 0)
+            languages.insert(language)
+        }
+        guard let language = languages.first, languages.count == 1 else { return nil }
+        return (keys, language)
+    }
+
+    /// The current word was retyped in `language` (Caps Lock mid-word): its keys now count as
+    /// typed there, so the word goes on as one word.
+    mutating func retypeCurrentWord(in language: String) {
+        var index = line.count - 1
+        while index >= 0, case let .key(key, _, time, wordID) = line[index] {
+            line[index] = .key(key, language: language, time: time, wordID: wordID)
+            index -= 1
+        }
+    }
+
     // MARK: - Internals
 
     private mutating func startRewritingIfErased() {
