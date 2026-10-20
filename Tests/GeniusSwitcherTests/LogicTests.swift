@@ -277,6 +277,14 @@ final class AutoFixTests: XCTestCase {
         XCTAssertEqual(detector.verdict(FakeLayouts.keys(privet), language: "en", renderer: FakeLayouts(), trimEdges: false), .fix)
     }
 
+    func testCapsLockMidWordKeepsARightWord() {
+        // "привет" typed in Russian, then Caps Lock (e.g. for ":"): only switch, no retyping.
+        XCTAssertFalse(detector.retypesOnCapsLock(FakeLayouts.keys(privet), language: "ru", renderer: FakeLayouts()))
+        // "ghbdtn" and the unfinished "ghb": retyped.
+        XCTAssertTrue(detector.retypesOnCapsLock(FakeLayouts.keys(privet), language: "en", renderer: FakeLayouts()))
+        XCTAssertTrue(detector.retypesOnCapsLock(FakeLayouts.keys(Array(privet.prefix(3))), language: "en", renderer: FakeLayouts()))
+    }
+
     func testExceptionsStoreNoText() {
         var exceptions = FixExceptions()
         exceptions.add(FakeLayouts.keys(privet), language: "en")

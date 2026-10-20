@@ -464,10 +464,13 @@ final class Observer: ObservableObject {
     }
 
     /// Caps Lock in the middle of a word: the letters typed so far are retyped in the other layout
-    /// and the layout is switched, so the word goes on in the right one.
+    /// and the layout is switched, so the word goes on in the right one. A word already right as
+    /// typed is left alone (false: Caps Lock only switches).
     private func retypeCurrentWord() -> Bool {
         guard canPost, !paused, !isExcluded, let word = tracker.currentWord,
-              let target = layouts.other(than: word.language) else { return false }
+              let target = layouts.other(than: word.language),
+              LayoutDetector.system.retypesOnCapsLock(word.keys, language: word.language, renderer: layouts)
+        else { return false }
         let typed = layouts.text(word.keys, language: word.language)
         let retyped = layouts.text(word.keys, language: target)
         guard typed.count == word.keys.count, retyped.count == word.keys.count else { return false }

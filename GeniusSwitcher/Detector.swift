@@ -50,6 +50,13 @@ struct LayoutDetector {
         }
     }
 
+    /// Caps Lock in the middle of a word retypes the letters in the other layout, unless they
+    /// already are a word where they were typed: then Caps Lock only switches, for what comes next
+    /// ("пишут" + Caps Lock + ":" must stay "пишут:", not become "gbien:", 2026-10-20).
+    func retypesOnCapsLock(_ keys: [TypedKey], language: String, renderer: LayoutRendering) -> Bool {
+        verdict(keys, language: language, renderer: renderer) != .keep
+    }
+
     static func isScript(_ word: String, _ language: String) -> Bool {
         word.unicodeScalars.allSatisfy { scalar in
             switch language {
