@@ -26,7 +26,7 @@ struct MenuView: View {
                     Button("Открыть настройки…") { observer.requestPermission() }
                 }
             }
-            if observer.autoFix && !observer.canPost {
+            if (observer.autoFix || observer.yoFix) && !observer.canPost {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Нужен «Универсальный доступ», чтобы исправлять текст", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
@@ -35,7 +35,8 @@ struct MenuView: View {
             }
 
             Toggle("Автоисправление раскладки", isOn: $observer.autoFix)
-            if observer.autoFix, let app = observer.lastApp {
+            Toggle("Ставить ё (еще → ещё)", isOn: $observer.yoFix)
+            if observer.autoFix || observer.yoFix, let app = observer.lastApp {
                 Toggle("Исправлять в «\(app.name)»", isOn: Binding(
                     get: { !observer.autoOffApps.contains(app.id) },
                     set: { observer.setAutoOff(app.id, !$0) }))

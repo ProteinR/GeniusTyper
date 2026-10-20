@@ -405,3 +405,53 @@ final class ClipboardTests: XCTestCase {
         XCTAssertEqual(item("/a/b.txt\n/c/d.png", kind: .files).title, "b.txt и ещё 1")
     }
 }
+
+final class YoficatorTests: XCTestCase {
+    /// The real dictionary from the app bundle (the test host).
+    private let yo = Yoficator.shared
+
+    func testRestoresAlwaysYoWords() {
+        XCTAssertEqual(yo.restore("еще"), "ещё")
+        XCTAssertEqual(yo.restore("ее"), "её")
+        XCTAssertEqual(yo.restore("елка"), "ёлка")
+        XCTAssertEqual(yo.restore("идет"), "идёт")
+    }
+
+    func testLeavesAmbiguousAndPlainWords() {
+        XCTAssertNil(yo.restore("все"))
+        XCTAssertNil(yo.restore("узнаем"))
+        XCTAssertNil(yo.restore("привет"))
+        XCTAssertNil(yo.restore("hello"))
+        XCTAssertNil(yo.restore("ещё"))
+    }
+
+    func testCase() {
+        XCTAssertEqual(yo.restore("Еще"), "Ещё")
+        XCTAssertEqual(yo.restore("ЕЩЕ"), "ЕЩЁ")
+        XCTAssertEqual(yo.restore("Артем"), "Артём")
+        XCTAssertEqual(yo.restore("АРТЕМ"), "АРТЁМ")
+        // Names only with a capital letter; mixed case is left alone.
+        XCTAssertNil(yo.restore("артем"))
+        XCTAssertNil(yo.restore("еЩе"))
+    }
+
+    func testLowercaseOnlyForms() {
+        let dictionary = Yoficator(dictionary: Data("ёлка\nкиёв*\n".utf8))
+        XCTAssertEqual(dictionary.restore("киев"), "киёв")
+        XCTAssertNil(dictionary.restore("Киев"))
+        XCTAssertEqual(dictionary.restore("Елка"), "Ёлка")
+        XCTAssertNil(Yoficator(dictionary: Data()).restore("еще"))
+    }
+
+    /// Every form in the file is found again (the sort order matches the search).
+    func testWholeDictionaryIsSearchable() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "yo", withExtension: "txt"))
+        let lines = try String(contentsOf: url, encoding: .utf8).split(separator: "\n")
+        XCTAssertGreaterThan(lines.count, 100_000)
+        for line in lines where !line.hasSuffix("*") {
+            let form = String(line)
+            let plain = form.replacingOccurrences(of: "ё", with: "е").replacingOccurrences(of: "Ё", with: "Е")
+            XCTAssertEqual(yo.restore(plain), form)
+        }
+    }
+}

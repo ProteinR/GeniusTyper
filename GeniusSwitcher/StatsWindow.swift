@@ -75,6 +75,7 @@ private struct StatsView: View {
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
             row("Слов", "\(stats.words)" + languages)
             row("Исправлено автоматически", "\(stats.autoFixes)" + (stats.autoUndos > 0 ? " (отменено: \(stats.autoUndos))" : ""))
+            row("Поставлено ё", "\(stats.yoFixes)" + (stats.yoUndos > 0 ? " (отменено: \(stats.yoUndos))" : ""))
             row("Не дал исправить (⇧ + пробел)", "\(stats.autoSkips)")
             row("Исправил раскладку вручную", "\(stats.wrongLayoutFixes)" + (stats.lateFixes > 0 ? " (после пробела: \(stats.lateFixes))" : ""))
             row("Исправил Caps Lock посреди слова", "\(stats.capsFixes)")

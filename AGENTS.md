@@ -26,6 +26,16 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   (`SkipCounter`, memory only), shows `ExceptionSuggestion`: a non-activating panel in the top right
   ("«rtl» — в исключения?", hides after 8 s, never takes the focus). Off by default in terminals and
   code editors. Genius Switcher's own events carry a marker and are ignored by the tap.
+- **ё** (`Yoficator.swift`, as Caramba's "Ёфикатор"; panel "Ставить ё", on by default): after a
+  space or punctuation a Russian word typed with е where ё is always right gets it ("еще" → "ещё",
+  "Артем" → "Артём", "ЕЩЕ" → "ЕЩЁ"); also in words the auto-fix turns into Russian. Only the letters
+  from the first ё on are retyped. Words with both spellings (все/всё, узнаем/узнаём) are never
+  touched. Same rules as the auto-fix: not after Enter, ⇧+Space keeps the word, Caps Lock right
+  after puts е back (journal `yoFix` / `yoUndo`) and offers the exceptions (a word there is never
+  given ё), off in "Не исправлять в" apps. Dictionary `GeniusSwitcher/yo.txt`: eyo-kernel's
+  `dictionary/safe.txt` (MIT, github.com/hcodes/eyo-kernel, licence in `yo-LICENSE.txt`) expanded
+  by `scripts/make-yo-dictionary.py` into ~107 000 sorted forms; memory-mapped and binary-searched,
+  no heap. To update: download a newer `safe.txt`, run the script, run the tests.
 - **Exceptions window** (`ExceptionsEditor.swift`; panel "Изменить…", right-click "Исключения…"):
   tab "Слова" = `UserExceptions`, words as typed, never fixed, stored as text in the settings
   (`userExceptions`), never in the journal; seeded on 2026-10-18 with INVENTIRE abbreviations the

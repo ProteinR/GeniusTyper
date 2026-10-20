@@ -36,6 +36,14 @@ final class Observer: ObservableObject {
         }
     }
 
+    /// Restore ё after the space: "еще" → "ещё" (`Yoficator`).
+    @Published var yoFix: Bool {
+        didSet {
+            UserDefaults.standard.set(yoFix, forKey: "yoFix")
+            if yoFix && !canPost { requestPostPermission() }
+        }
+    }
+
     /// Accessibility: Genius Switcher may type (needed for auto-fix only).
     @Published private(set) var canPost = KeyPoster.canPost
 
@@ -93,6 +101,7 @@ final class Observer: ObservableObject {
         capsLockSwitching = defaults.object(forKey: "capsLockSwitching") as? Bool ?? true
         excludedApps = (defaults.array(forKey: "excludedApps") as? [String]).map(Set.init) ?? Self.defaultExcluded
         autoFix = defaults.object(forKey: "autoFix") as? Bool ?? true
+        yoFix = defaults.object(forKey: "yoFix") as? Bool ?? true
         autoOffApps = (defaults.array(forKey: "autoOffApps") as? [String]).map(Set.init) ?? AutoFixRules.defaultOff
         exceptions = FixExceptions(hashes: Set(defaults.array(forKey: "fixExceptions") as? [String] ?? []))
         exceptionCount = exceptions.hashes.count
@@ -131,8 +140,8 @@ final class Observer: ObservableObject {
             MainActor.assumeIsolated { self.write(self.recorder.expire(now: Date().timeIntervalSince1970)) }
         })
 
-        Log.info("Permissions: Input Monitoring \(hasPermission ? "yes" : "no"), Accessibility \(canPost ? "yes" : "no"), auto-fix \(autoFix ? "on" : "off")", "keys")
-        if autoFix && !canPost { CGRequestPostEventAccess() }
+        Log.info("Permissions: Input Monitoring \(hasPermission ? "yes" : "no"), Accessibility \(canPost ? "yes" : "no"), auto-fix \(autoFix ? "on" : "off"), ё \(yoFix ? "on" : "off")", "keys")
+        if (autoFix || yoFix) && !canPost { CGRequestPostEventAccess() }
         timers.append(Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
             MainActor.assumeIsolated {
                 let can = KeyPoster.canPost
@@ -360,31 +369,36 @@ final class Observer: ObservableObject {
     // MARK: - Auto-fix
 
     private func autoFixIfNeeded(_ outputs: [TrackerOutput], separator: (key: TypedKey, typed: String), keep: Bool, time: TimeInterval) {
-        guard autoFix, canPost, !(currentApp.map(autoOffApps.contains) ?? false) else { return }
+        guard canPost, !(currentApp.map(autoOffApps.contains) ?? false) else { return }
         guard let word = outputs.lazy.compactMap({ output -> FinishedWord? in
             if case let .word(word) = output { return word } else { return nil }
         }).first,
-              !word.mixed, AutoFixRules.fixes(after: word.endedBy),
-              let target = layouts.other(than: word.language),
-              !exceptions.contains(word.keys, language: word.language),
-              !userExceptions.contains(word.keys, language: word.language, renderer: layouts),
-              LayoutDetector.system.verdict(word.keys, language: word.language, renderer: layouts, trimEdges: false) == .fix
-        else { return }
-
-        if keep {
-            var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .autoSkip, app: currentApp)
-            entry.from = word.language
-            entry.len = word.keys.count
-            write([entry])
-            if skips.register(FixExceptions.hash(word.keys, language: word.language)) {
-                suggestException(word.keys, language: word.language)
+              !word.mixed, AutoFixRules.fixes(after: word.endedBy) else { return }
+        if autoFix, let target = layouts.other(than: word.language),
+           !exceptions.contains(word.keys, language: word.language),
+           !userExceptions.contains(word.keys, language: word.language, renderer: layouts),
+           LayoutDetector.system.verdict(word.keys, language: word.language, renderer: layouts, trimEdges: false) == .fix {
+            if keep {
+                var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .autoSkip, app: currentApp)
+                entry.from = word.language
+                entry.len = word.keys.count
+                write([entry])
+                if skips.register(FixExceptions.hash(word.keys, language: word.language)) {
+                    suggestException(word.keys, language: word.language)
+                }
+            } else {
+                fixLayout(word, to: target, separator: separator, time: time)
             }
-            return
+        } else if !keep {
+            restoreYo(word, separator: separator, time: time)
         }
+    }
 
+    private func fixLayout(_ word: FinishedWord, to target: String, separator: (key: TypedKey, typed: String), time: TimeInterval) {
         let original = layouts.text(word.keys, language: word.language) + separator.typed
         let fixedSeparator = layouts.character(separator.key, language: target).map(String.init) ?? separator.typed
-        let fixed = layouts.text(word.keys, language: target) + fixedSeparator
+        let fixedWord = layouts.text(word.keys, language: target)
+        let fixed = ((target == "ru" ? withYo(fixedWord) : nil) ?? fixedWord) + fixedSeparator
         recorder.markAutoFixed(word.id)
         // The text changed behind the tracker's back: start a fresh line.
         tracker = WordTracker(renderer: layouts)
@@ -393,7 +407,7 @@ final class Observer: ObservableObject {
         autoSwitchTime = time
         // A moment later, so the separator has reached the app before it is erased.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) {
-            KeyPoster.replace(deleting: original.count, with: fixed)
+            KeyPoster.change(from: original, to: fixed)
             CapsLockSwitch.select(target, renderer: self.layouts)
         }
         var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .autoFix, app: currentApp)
@@ -404,6 +418,32 @@ final class Observer: ObservableObject {
         Log.debug("Auto-fix \(word.language)→\(target), \(word.keys.count) keys", "auto")
     }
 
+    /// The Russian word with ё restored, unless ё is off or the word is in the exceptions.
+    private func withYo(_ word: String) -> String? {
+        guard yoFix, !userExceptions.contains(word) else { return nil }
+        return Yoficator.shared.restore(word)
+    }
+
+    /// A Russian word typed with е where ё is always right: only the letters from the first ё on
+    /// are retyped. Caps Lock right after puts е back, like an auto-fix.
+    private func restoreYo(_ word: FinishedWord, separator: (key: TypedKey, typed: String), time: TimeInterval) {
+        guard word.language == "ru" else { return }
+        let typed = layouts.text(word.keys, language: word.language)
+        guard typed.count == word.keys.count, let restored = withYo(typed) else { return }
+        let original = typed + separator.typed
+        let fixed = restored + separator.typed
+        tracker = WordTracker(renderer: layouts)
+        lastFix = LastFix(keys: word.keys, originalLanguage: word.language, fixedLanguage: word.language,
+                          original: original, fixed: fixed, time: time)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) {
+            KeyPoster.change(from: original, to: fixed)
+        }
+        var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .yoFix, app: currentApp)
+        entry.len = word.keys.count
+        write([entry])
+        Log.debug("ё restored, \(word.keys.count) keys", "yo")
+    }
+
     /// Caps Lock right after an auto-fix, before any other key: puts the word back, returns to the
     /// original layout and offers to add the word to the exceptions.
     private func undoLastFix() -> Bool {
@@ -411,10 +451,10 @@ final class Observer: ObservableObject {
         guard let fix = lastFix, now - fix.time < LastFix.undoWindow, lastKeyTime <= fix.time else { return false }
         lastFix = nil
         capsSwitchTime = now
-        KeyPoster.replace(deleting: fix.fixed.count, with: fix.original)
-        CapsLockSwitch.select(fix.originalLanguage, renderer: layouts)
+        KeyPoster.change(from: fix.fixed, to: fix.original)
+        if fix.fixedLanguage != fix.originalLanguage { CapsLockSwitch.select(fix.originalLanguage, renderer: layouts) }
         suggestException(fix.keys, language: fix.originalLanguage)
-        var entry = JournalEntry(t: Date(), kind: .autoUndo, app: currentApp)
+        var entry = JournalEntry(t: Date(), kind: fix.fixedLanguage == fix.originalLanguage ? .yoUndo : .autoUndo, app: currentApp)
         entry.from = fix.fixedLanguage
         entry.to = fix.originalLanguage
         entry.len = fix.keys.count

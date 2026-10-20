@@ -12,6 +12,8 @@ struct JournalEntry: Codable, Equatable {
         /// Caps Lock in the middle of a word: the letters typed so far were retyped in the other
         /// layout (the user noticed the wrong layout before the detector could).
         case capsFix
+        /// ё restored after the space ("еще" → "ещё") / put back to е with Caps Lock.
+        case yoFix, yoUndo
         case switchLayout = "switch"
     }
 
@@ -77,6 +79,8 @@ struct DayStats: Equatable {
     var autoUndos = 0
     var autoSkips = 0
     var capsFixes = 0
+    var yoFixes = 0
+    var yoUndos = 0
 
     mutating func add(_ entry: JournalEntry) {
         switch entry.kind {
@@ -105,6 +109,10 @@ struct DayStats: Equatable {
             autoSkips += 1
         case .capsFix:
             capsFixes += 1
+        case .yoFix:
+            yoFixes += 1
+        case .yoUndo:
+            yoUndos += 1
         case .start, .pause, .resume:
             break
         }

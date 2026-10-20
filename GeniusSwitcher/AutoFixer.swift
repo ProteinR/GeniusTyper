@@ -21,6 +21,12 @@ enum KeyPoster {
         }
     }
 
+    /// Turns `old` (just typed, the caret after it) into `new`: erases only after the common start.
+    static func change(from old: String, to new: String) {
+        let common = zip(old, new).prefix { $0 == $1 }.count
+        replace(deleting: old.count - common, with: String(new.dropFirst(common)))
+    }
+
     /// ⌘V: pastes what the clipboard history has just put on the pasteboard.
     static func pressPaste() {
         post(source: CGEventSource(stateID: .privateState), keyCode: 9, text: nil, flags: .maskCommand)
