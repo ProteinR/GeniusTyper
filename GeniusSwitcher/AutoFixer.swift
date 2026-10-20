@@ -134,6 +134,10 @@ struct LastFix {
     let original: String
     let fixed: String
     let time: TimeInterval
+    /// Tracked words the fix retyped (relabelled back on undo).
+    var wordIDs: Set<Int> = []
+    /// Caps Lock twice converted the whole phrase.
+    var phrase = false
     /// Caps Lock within this time, with no key typed in between, undoes the fix.
     static let undoWindow: TimeInterval = 5
 }
@@ -150,4 +154,84 @@ enum AutoFixRules {
         "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "com.apple.dt.Xcode",
         "com.microsoft.VSCode", "com.jetbrains.goland", "com.google.antigravity", "com.google.antigravity-ide",
     ]
+}
+
+/// Words of one letter. The detector skips them, so "z" in "z lfdfq" (= "я давай") needs its own
+/// rule: it follows the word after it into the other layout.
+enum OneLetterWords {
+    static let words: [String: Set<Character>] = [
+        "ru": ["а", "в", "и", "к", "о", "с", "у", "я"],
+        "en": ["a", "i"],
+    ]
+
+    static func contains(_ character: Character, language: String) -> Bool {
+        words[language]?.contains(Character(character.lowercased())) ?? false
+    }
+
+    /// Not a word as typed, a word in `target`.
+    static func follows(_ key: TypedKey, from language: String, to target: String, renderer: LayoutRendering) -> Bool {
+        guard let typed = renderer.character(key, language: language),
+              let converted = renderer.character(key, language: target) else { return false }
+        return !contains(typed, language: language) && contains(converted, language: target)
+    }
+}
+
+/// Caps Lock twice: the whole phrase (the tracked text since the last line break) goes into one
+/// layout, the one in which more of its words are words. Pure, tested.
+enum PhraseFix {
+    /// The layout to convert to; nil when the phrase already is all in it (or is empty).
+    static func target(_ parts: [PhrasePart], detector: LayoutDetector, renderer: LayoutRendering) -> String? {
+        let words = words(of: parts)
+        guard !words.isEmpty else { return nil }
+        var scores: [String: Int] = [:]
+        for language in renderer.languages {
+            scores[language] = words.filter { isWord($0, language: language, detector: detector, renderer: renderer) }.count
+        }
+        let best = scores.values.max() ?? 0
+        let leaders = renderer.languages.filter { scores[$0] == best }
+        let target: String
+        if leaders.count == 1 {
+            target = leaders[0]
+        } else {
+            // No help from the dictionary (names, code): the other layout of most keys.
+            var keyCounts: [String: Int] = [:]
+            for case let .key(_, language) in parts { keyCounts[language, default: 0] += 1 }
+            guard let majority = keyCounts.max(by: { $0.value < $1.value })?.key,
+                  let other = renderer.other(than: majority) else { return nil }
+            target = other
+        }
+        let changes = parts.contains { if case let .key(_, language) = $0 { return language != target } else { return false } }
+        return changes ? target : nil
+    }
+
+    /// The phrase as on screen (`target` nil) or with every key in `target`.
+    static func text(_ parts: [PhrasePart], in target: String? = nil, renderer: LayoutRendering) -> String {
+        String(parts.compactMap { part -> Character? in
+            switch part {
+            case let .key(key, language): return renderer.character(key, language: target ?? language)
+            case let .separator(character): return character
+            }
+        })
+    }
+
+    static func words(of parts: [PhrasePart]) -> [[TypedKey]] {
+        var words: [[TypedKey]] = []
+        var current: [TypedKey] = []
+        for part in parts {
+            if case let .key(key, _) = part {
+                current.append(key)
+            } else if !current.isEmpty {
+                words.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty { words.append(current) }
+        return words
+    }
+
+    private static func isWord(_ keys: [TypedKey], language: String, detector: LayoutDetector, renderer: LayoutRendering) -> Bool {
+        let core = renderer.text(keys, language: language).trimmingCharacters(in: CharacterSet.letters.inverted)
+        if core.count == 1 { return OneLetterWords.contains(core.first!, language: language) }
+        return core.count > 1 && LayoutDetector.isScript(core, language) && detector.isWord(core, language)
+    }
 }

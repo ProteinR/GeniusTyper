@@ -31,6 +31,12 @@ struct Rewrite: Equatable {
     let time: TimeInterval
 }
 
+/// One character on screen in the tracked line: a key typed in a layout, or a separator.
+enum PhrasePart: Equatable {
+    case key(TypedKey, language: String)
+    case separator(Character)
+}
+
 enum TrackerOutput: Equatable {
     case word(FinishedWord)
     case rewrite(Rewrite)
@@ -162,6 +168,61 @@ struct WordTracker {
             line[index] = .key(key, language: language, time: time, wordID: wordID)
             index -= 1
         }
+    }
+
+    /// The tracked text since the last line break, as on screen: for Caps Lock twice (convert the
+    /// phrase).
+    var phrase: [PhrasePart] {
+        var parts: [PhrasePart] = []
+        for item in line.reversed() {
+            switch item {
+            case let .key(key, language, _, _): parts.append(.key(key, language: language))
+            case let .separator(character):
+                if character == "\n" { return parts.reversed() }
+                parts.append(.separator(character))
+            }
+        }
+        return parts.reversed()
+    }
+
+    /// The phrase was retyped in `language`: all its keys count as typed there. Erasing in
+    /// progress is forgotten (the erased text is gone from the screen anyway).
+    mutating func retypePhrase(in language: String) {
+        var index = line.count - 1
+        while index >= 0 {
+            if case .separator("\n") = line[index] { break }
+            if case let .key(key, _, time, wordID) = line[index] {
+                line[index] = .key(key, language: language, time: time, wordID: wordID)
+            }
+            index -= 1
+        }
+        erasing = nil
+        rewriting = nil
+    }
+
+    /// Finished words now count as typed in `language` (the auto-fix retyped them, or its undo).
+    mutating func relabel(words ids: Set<Int>, to language: String) {
+        for index in line.indices {
+            if case let .key(key, _, time, wordID?) = line[index], ids.contains(wordID) {
+                line[index] = .key(key, language: language, time: time, wordID: wordID)
+            }
+        }
+    }
+
+    /// One-letter words right before word `id`, each followed by one space ("z" in "z lfdfq"),
+    /// nearest first.
+    func singleLetterWords(before id: Int) -> [(id: Int, key: TypedKey, language: String)] {
+        guard var index = line.firstIndex(where: {
+            if case let .key(_, _, _, wordID) = $0 { return wordID == id } else { return false }
+        }) else { return [] }
+        var words: [(id: Int, key: TypedKey, language: String)] = []
+        while index >= 2, case .separator(" ") = line[index - 1],
+              case let .key(key, language, _, wordID?) = line[index - 2] {
+            if index >= 3, case .key = line[index - 3] { break }
+            words.append((wordID, key, language))
+            index -= 2
+        }
+        return words
     }
 
     // MARK: - Internals

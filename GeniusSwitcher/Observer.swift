@@ -87,6 +87,9 @@ final class Observer: ObservableObject {
     /// Logged once per launch, the mismatch itself is expected after every auto-switch.
     private var loggedEventMismatch = false
     private var lastFix: LastFix?
+    /// The last Caps Lock press, for Caps Lock twice (convert the phrase).
+    private var lastCapsPress: TimeInterval = 0
+    static let doubleCapsWindow: TimeInterval = 0.4
     private var skips = SkipCounter()
     private var exceptions: FixExceptions {
         didSet {
@@ -296,8 +299,14 @@ final class Observer: ObservableObject {
 
         if code == CapsLockSwitch.f18KeyCode {
             guard capsLockSwitching, event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return }
+            let now = Date().timeIntervalSince1970
+            let double = now - lastCapsPress < Self.doubleCapsWindow && lastKeyTime < lastCapsPress
+            lastCapsPress = now
             if flags.contains(.maskShift) {
                 CapsLockSwitch.toggleCapsLock()
+            } else if double, convertPhrase() {
+                lastCapsPress = 0
+                return
             } else if undoLastFix() {
                 return
             } else if retypeCurrentWord() {
@@ -395,15 +404,21 @@ final class Observer: ObservableObject {
     }
 
     private func fixLayout(_ word: FinishedWord, to target: String, separator: (key: TypedKey, typed: String), time: TimeInterval) {
-        let original = layouts.text(word.keys, language: word.language) + separator.typed
+        // One-letter words just before it go along: "z lfdfq" → "я давай", not "z давай".
+        let letters = tracker.singleLetterWords(before: word.id)
+            .prefix { $0.language == word.language && OneLetterWords.follows($0.key, from: word.language, to: target, renderer: layouts) }
+            .reversed()
+        let lettersOriginal = letters.map { layouts.text([$0.key], language: word.language) + " " }.joined()
+        let lettersFixed = letters.map { layouts.text([$0.key], language: target) + " " }.joined()
+        let original = lettersOriginal + layouts.text(word.keys, language: word.language) + separator.typed
         let fixedSeparator = layouts.character(separator.key, language: target).map(String.init) ?? separator.typed
         let fixedWord = layouts.text(word.keys, language: target)
-        let fixed = ((target == "ru" ? withYo(fixedWord) : nil) ?? fixedWord) + fixedSeparator
+        let fixed = lettersFixed + ((target == "ru" ? withYo(fixedWord) : nil) ?? fixedWord) + fixedSeparator
         recorder.markAutoFixed(word.id)
-        // The text changed behind the tracker's back: start a fresh line.
-        tracker = WordTracker(renderer: layouts)
+        let ids = Set([word.id] + letters.map(\.id))
+        tracker.relabel(words: ids, to: target)
         lastFix = LastFix(keys: word.keys, originalLanguage: word.language, fixedLanguage: target,
-                          original: original, fixed: fixed, time: time)
+                          original: original, fixed: fixed, time: time, wordIDs: ids)
         autoSwitchTime = time
         // A moment later, so the separator has reached the app before it is erased.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) {
@@ -415,7 +430,7 @@ final class Observer: ObservableObject {
         entry.to = target
         entry.len = word.keys.count
         write([entry])
-        Log.debug("Auto-fix \(word.language)→\(target), \(word.keys.count) keys", "auto")
+        Log.debug("Auto-fix \(word.language)→\(target), \(word.keys.count) keys" + (letters.isEmpty ? "" : " + \(letters.count) one-letter"), "auto")
     }
 
     /// The Russian word with ё restored, unless ё is off or the word is in the exceptions.
@@ -432,7 +447,6 @@ final class Observer: ObservableObject {
         guard typed.count == word.keys.count, let restored = withYo(typed) else { return }
         let original = typed + separator.typed
         let fixed = restored + separator.typed
-        tracker = WordTracker(renderer: layouts)
         lastFix = LastFix(keys: word.keys, originalLanguage: word.language, fixedLanguage: word.language,
                           original: original, fixed: fixed, time: time)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.015) {
@@ -453,13 +467,49 @@ final class Observer: ObservableObject {
         capsSwitchTime = now
         KeyPoster.change(from: fix.fixed, to: fix.original)
         if fix.fixedLanguage != fix.originalLanguage { CapsLockSwitch.select(fix.originalLanguage, renderer: layouts) }
-        suggestException(fix.keys, language: fix.originalLanguage)
-        var entry = JournalEntry(t: Date(), kind: fix.fixedLanguage == fix.originalLanguage ? .yoUndo : .autoUndo, app: currentApp)
+        if fix.phrase {
+            // Each key had its own layout before: start a fresh line.
+            tracker = WordTracker(renderer: layouts)
+        } else {
+            tracker.relabel(words: fix.wordIDs, to: fix.originalLanguage)
+            suggestException(fix.keys, language: fix.originalLanguage)
+        }
+        let kind: JournalEntry.Kind = fix.phrase ? .phraseUndo : fix.fixedLanguage == fix.originalLanguage ? .yoUndo : .autoUndo
+        var entry = JournalEntry(t: Date(), kind: kind, app: currentApp)
         entry.from = fix.fixedLanguage
         entry.to = fix.originalLanguage
         entry.len = fix.keys.count
         write([entry])
         Log.info("Auto-fix undone", "auto")
+        return true
+    }
+
+    /// Caps Lock twice: the phrase since the last line break goes into the layout where more of its
+    /// words are words ("z lfdfq" → "я давай", "ghbdtn rfr ltkf" → "привет как дела"). False when it
+    /// already is: the second press then works as a single one.
+    private func convertPhrase() -> Bool {
+        guard canPost, !paused, !isExcluded else { return false }
+        let parts = tracker.phrase
+        guard let target = PhraseFix.target(parts, detector: .system, renderer: layouts) else { return false }
+        let original = PhraseFix.text(parts, renderer: layouts)
+        let fixed = PhraseFix.text(parts, in: target, renderer: layouts)
+        guard original.count == parts.count, fixed.count == parts.count else { return false }
+        let now = Date().timeIntervalSince1970
+        capsSwitchTime = now
+        KeyPoster.change(from: original, to: fixed)
+        CapsLockSwitch.select(target, renderer: layouts)
+        let from = parts.compactMap { part -> String? in
+            if case let .key(_, language) = part, language != target { return language } else { return nil }
+        }.first ?? target
+        tracker.retypePhrase(in: target)
+        lastFix = LastFix(keys: [], originalLanguage: from, fixedLanguage: target,
+                          original: original, fixed: fixed, time: now, phrase: true)
+        var entry = JournalEntry(t: Date(timeIntervalSince1970: now), kind: .phraseFix, app: currentApp)
+        entry.from = from
+        entry.to = target
+        entry.len = parts.count
+        write([entry])
+        Log.debug("Caps Lock twice: phrase of \(parts.count) characters → \(target)", "auto")
         return true
     }
 

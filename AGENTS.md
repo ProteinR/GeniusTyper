@@ -16,12 +16,17 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   Accessibility): apps beeped at it on every press (2026-10-19). ⇧ + Caps Lock toggles the real Caps Lock. One rule: Caps Lock
   makes the text be in the other layout. Right after an auto-fix it undoes it; in the middle of a
   word (letters typed, no separator yet) it retypes those letters in the other layout and switches
-  (`retypeCurrentWord`, journal `capsFix`), the word goes on as one word; otherwise it only switches.
-  Competitors use double Shift for "convert last word"; not added (2026-10-19): Caps Lock covers it,
-  only "noticed after the space" is left, add double Shift if the journal shows that often.
+  (`retypeCurrentWord`, journal `capsFix`), the word goes on as one word, unless the letters already
+  are a word as typed (detector `keep`: "пишут" + Caps Lock + ":" stays "пишут:", 2026-10-20);
+  otherwise it only switches. **Caps Lock twice** (within 0.4 s, `convertPhrase`, journal
+  `phraseFix`/`phraseUndo`): the tracked text since the last line break goes into the layout in
+  which more of its words are words (`PhraseFix`; a tie, e.g. names only: the other layout of most
+  keys); nothing to change → the second press is a plain one. Caps Lock right after undoes it.
+  Competitors use double Shift or Pause for "convert last word"; Caps Lock covers it here.
 - **Auto-fix** (`AutoFixer.swift`, Accessibility permission): after a space or punctuation (not
   Enter), a word with verdict `fix` on all its keys is erased and typed in the other layout, and the
-  layout is switched. ⇧+Space ends a word without fixing it (journal `autoSkip`). Caps Lock right
+  layout is switched. One-letter words right before it go along when they are not a word as typed
+  and are one in the other layout (`OneLetterWords`: "z lfdfq" → "я давай", not "z давай"). ⇧+Space ends a word without fixing it (journal `autoSkip`). Caps Lock right
   after a fix (no key in between, 5 s) undoes it. Undo, or ⇧+Space twice for the same word
   (`SkipCounter`, memory only), shows `ExceptionSuggestion`: a non-activating panel in the top right
   ("«rtl» — в исключения?", hides after 8 s, never takes the focus). Off by default in terminals and

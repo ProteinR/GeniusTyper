@@ -5,7 +5,7 @@ import XCTest
 private struct FakeLayouts: LayoutRendering {
     static let map: [UInt16: (en: Character, ru: Character)] = [
         5: ("g", "п"), 4: ("h", "р"), 11: ("b", "и"), 2: ("d", "в"), 17: ("t", "е"), 45: ("n", "т"),
-        31: ("o", "щ"), 40: ("k", "л"),
+        31: ("o", "щ"), 40: ("k", "л"), 6: ("z", "я"), 37: ("l", "д"), 3: ("f", "а"), 12: ("q", "й"),
         47: (".", "ю"), 43: (",", "б"), 44: ("/", "."), 18: ("1", "1"),
     ]
     let languages = ["en", "ru"]
@@ -22,6 +22,8 @@ private struct FakeLayouts: LayoutRendering {
 }
 
 private let privet: [UInt16] = [5, 4, 11, 2, 17, 45]
+/// "lfdfq" = "давай".
+private let davai: [UInt16] = [37, 3, 2, 3, 12]
 
 final class WordTrackerTests: XCTestCase {
     private var tracker = WordTracker(renderer: FakeLayouts())
@@ -53,6 +55,37 @@ final class WordTrackerTests: XCTestCase {
     private func space() -> [TrackerOutput] {
         time += 0.1
         return tracker.separator(" ", time: time)
+    }
+
+    func testOneLetterWordsBeforeAWord() {
+        // "z lfdfq ": "z" goes along with "lfdfq" when it is fixed.
+        type([6], "en")
+        _ = space()
+        type(davai, "en")
+        let word = words(space()).first!
+        let letters = tracker.singleLetterWords(before: word.id)
+        XCTAssertEqual(letters.map(\.key.code), [6])
+        // "ok lfdfq": the word before has two letters, nothing goes along.
+        tracker = WordTracker(renderer: FakeLayouts())
+        type([31, 40], "en")
+        _ = space()
+        type(davai, "en")
+        XCTAssertTrue(tracker.singleLetterWords(before: words(space()).first!.id).isEmpty)
+    }
+
+    func testPhraseAndRelabel() {
+        type([6], "en")
+        _ = space()
+        type(davai, "en")
+        let word = words(space()).first!
+        tracker.relabel(words: [word.id], to: "ru")
+        XCTAssertEqual(PhraseFix.text(tracker.phrase, renderer: FakeLayouts()), "z давай ")
+        // A line break starts a new phrase.
+        _ = tracker.separator("\n", time: time)
+        type([6], "en")
+        XCTAssertEqual(PhraseFix.text(tracker.phrase, renderer: FakeLayouts()), "z")
+        tracker.retypePhrase(in: "ru")
+        XCTAssertEqual(PhraseFix.text(tracker.phrase, renderer: FakeLayouts()), "я")
     }
 
     private func rewrites(_ outputs: [TrackerOutput]) -> [Rewrite] {
@@ -283,6 +316,38 @@ final class AutoFixTests: XCTestCase {
         // "ghbdtn" and the unfinished "ghb": retyped.
         XCTAssertTrue(detector.retypesOnCapsLock(FakeLayouts.keys(privet), language: "en", renderer: FakeLayouts()))
         XCTAssertTrue(detector.retypesOnCapsLock(FakeLayouts.keys(Array(privet.prefix(3))), language: "en", renderer: FakeLayouts()))
+    }
+
+    func testOneLetterWordFollows() {
+        let z = TypedKey(code: 6, shift: false, caps: false)
+        XCTAssertTrue(OneLetterWords.follows(z, from: "en", to: "ru", renderer: FakeLayouts()))  // z → я
+        let f = TypedKey(code: 3, shift: false, caps: false)
+        XCTAssertTrue(OneLetterWords.follows(f, from: "en", to: "ru", renderer: FakeLayouts()))  // f → а
+        let o = TypedKey(code: 31, shift: false, caps: false)
+        XCTAssertFalse(OneLetterWords.follows(o, from: "en", to: "ru", renderer: FakeLayouts()))  // o → щ
+    }
+
+    func testPhraseTarget() {
+        let detector = LayoutDetector { word, _ in ["привет", "давай"].contains(word) }
+        func phrase(_ words: [([UInt16], String)]) -> [PhrasePart] {
+            var parts: [PhrasePart] = []
+            for (index, (codes, language)) in words.enumerated() {
+                if index > 0 { parts.append(.separator(" ")) }
+                parts += FakeLayouts.keys(codes).map { .key($0, language: language) }
+            }
+            return parts
+        }
+        // "z давай" → ru: "я давай".
+        let mixed = phrase([([6], "en"), (davai, "ru")])
+        XCTAssertEqual(PhraseFix.target(mixed, detector: detector, renderer: FakeLayouts()), "ru")
+        XCTAssertEqual(PhraseFix.text(mixed, in: "ru", renderer: FakeLayouts()), "я давай")
+        // "ghbdtn lfdfq" → ru.
+        XCTAssertEqual(PhraseFix.target(phrase([(privet, "en"), (davai, "en")]), detector: detector, renderer: FakeLayouts()), "ru")
+        // Already right: nothing to do.
+        XCTAssertNil(PhraseFix.target(phrase([(privet, "ru"), (davai, "ru")]), detector: detector, renderer: FakeLayouts()))
+        // No word known in either layout: the other layout of most keys.
+        XCTAssertEqual(PhraseFix.target(phrase([([31, 40], "en")]), detector: detector, renderer: FakeLayouts()), "ru")
+        XCTAssertNil(PhraseFix.target([], detector: detector, renderer: FakeLayouts()))
     }
 
     func testExceptionsStoreNoText() {

@@ -14,6 +14,8 @@ struct JournalEntry: Codable, Equatable {
         case capsFix
         /// ё restored after the space ("еще" → "ещё") / put back to е with Caps Lock.
         case yoFix, yoUndo
+        /// Caps Lock twice: the whole phrase converted to one layout / put back with Caps Lock.
+        case phraseFix, phraseUndo
         case switchLayout = "switch"
     }
 
@@ -103,11 +105,11 @@ struct DayStats: Equatable {
             if entry.context == "midWord" { midWordSwitches += 1 }
         case .autoFix:
             autoFixes += 1
-        case .autoUndo:
+        case .autoUndo, .phraseUndo:
             autoUndos += 1
         case .autoSkip:
             autoSkips += 1
-        case .capsFix:
+        case .capsFix, .phraseFix:
             capsFixes += 1
         case .yoFix:
             yoFixes += 1
