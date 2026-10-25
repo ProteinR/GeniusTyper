@@ -387,9 +387,22 @@ private struct ClipboardListView: View {
                 }
             }
             Divider()
-            Text("⏎ вставить · ⌥⏎ скопировать · ⇧⏎ без форматирования · ⌥⌫ удалить")
-                .font(.caption2).foregroundStyle(.secondary)
-                .padding(.vertical, 5)
+            HStack(spacing: 6) {
+                Text("⏎ вставить · ⌥⏎ скопировать · ⇧⏎ без форматирования · ⌥⌫ удалить")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+                // As in Maccy: the settings from the history itself (the app's panel, its clipboard section).
+                Button {
+                    ClipboardWindow.hide()
+                    DispatchQueue.main.async { AppDelegate.showPanel() }
+                } label: {
+                    Image(systemName: "gearshape").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Настройки")
+            }
+            .padding(.leading, 12).padding(.trailing, 10).padding(.vertical, 5)
         }
         .onAppear { searchFocused = true }
         .onChange(of: model.opened) { _, _ in searchFocused = true }

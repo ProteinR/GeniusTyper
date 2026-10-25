@@ -21,6 +21,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var statusItem: StatusItemController?
+    private static weak var shared: AppDelegate?
+
+    /// The panel (the app's settings), e.g. from the gear in the clipboard history.
+    @MainActor static func showPanel() { shared?.statusItem?.showPanel() }
+    @MainActor static func closePanel() { shared?.statusItem?.closePanel() }
 
     /// "G" (Genius) with a text cursor, like SF Symbols' "character.cursor.ibeam" ("A" with a cursor).
     static let menuBarImage: NSImage = {
@@ -52,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !Self.isRunningTests else { return }
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         Log.info("Genius Switcher \(Self.appVersion) (\(build)) started")
+        Self.shared = self
         statusItem = StatusItemController(
             image: Self.menuBarImage, title: "Genius Switcher",
             content: { AnyView(MenuView().environmentObject(Observer.shared)) },

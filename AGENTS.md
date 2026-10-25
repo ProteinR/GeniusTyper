@@ -59,7 +59,9 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   and seed phrases (Maccy's regex). Stored in `~/Library/Application Support/GeniusSwitcher/clipboard/`
   (`index.json` with texts + one folder per entry). Measured against Maccy: `MACCY-BASELINE.md`.
   The shortcut is changeable in the panel ("Открывать": click, press a combination with ⌘/⌥/⌃;
-  `KeyCombo`, stored as `clipboardHotKey`). Maccy must not run at the same time: both take ⇧⌘C, the
+  `KeyCombo`, stored as `clipboardHotKey`). As in Maccy, the gear at the bottom right of the
+  history opens the panel (its clipboard section), and "Открыть" next to "История буфера обмена" in
+  the panel opens the history. Maccy must not run at the same time: both take ⇧⌘C, the
   second registration does not fail and the app registered last gets it; the panel warns while
   Maccy is running.
 - **Watches typing, listen-only** (`Observer.swift`, Input Monitoring permission). Clicks, arrows, ⌘/⌃ shortcuts and app switches reset the tracked line.
@@ -110,6 +112,10 @@ load. Results and lessons: `MACCY-BASELINE.md`. Keep high-frequency state (`Typi
 `ClipboardStore.items`) out of what the panel observes: the kept panel re-renders even while hidden.
 
 Build and install: `scripts/install.sh`. Tests: `scripts/test.sh` (also removes the Debug app afterwards: a second copy with the same bundle ID steals the permissions).
+Both delete `build/` when done (~300 MB of intermediates and caches); `KEEP_BUILD=1` keeps it while
+iterating. **When finished, leave no extra copies or caches behind**: only
+`~/Applications/Genius Switcher.app` (`mdfind "kMDItemCFBundleIdentifier == 'com.dmemruk.GeniusSwitcher'"`
+shows one result), no `build/`, no DerivedData, and delete test screenshots (they show the clipboard).
 
 ## Menu bar icon
 

@@ -11,4 +11,6 @@ DEBUG_APP="build/dd/Build/Products/Debug/Genius Switcher.app"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 "$LSREGISTER" -u "$PWD/$DEBUG_APP" 2>/dev/null || true
 rm -rf "$DEBUG_APP"
+# Intermediates and caches (~300 MB): KEEP_BUILD=1 keeps them while iterating.
+[ "${KEEP_BUILD:-0}" = "1" ] || rm -rf build
 exit $status

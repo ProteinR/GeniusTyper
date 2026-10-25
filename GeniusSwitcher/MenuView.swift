@@ -87,7 +87,17 @@ private struct ClipboardSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Toggle("История буфера обмена", isOn: $clipboard.enabled)
+            HStack {
+                Toggle("История буфера обмена", isOn: $clipboard.enabled)
+                Spacer()
+                if clipboard.enabled {
+                    Button("Открыть") {
+                        AppDelegate.closePanel()
+                        DispatchQueue.main.async { ClipboardWindow.show() }
+                    }
+                    .controlSize(.small)
+                }
+            }
             if clipboard.enabled {
                 Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                     GridRow {

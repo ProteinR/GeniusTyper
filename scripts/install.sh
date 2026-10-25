@@ -34,5 +34,8 @@ ditto "$PRODUCT" "$HOME/Applications/$APP.app"
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 "$LSREGISTER" -u "$PWD/$PRODUCT" 2>/dev/null || true
 rm -rf "$PRODUCT"
+# The rest of the build (~300 MB of intermediates and caches) is not needed once installed.
+# KEEP_BUILD=1 keeps it for quick rebuilds while iterating.
+[ "${KEEP_BUILD:-0}" = "1" ] || rm -rf build
 open "$HOME/Applications/$APP.app"
 echo "Installed ~/Applications/$APP.app"
