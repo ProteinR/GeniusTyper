@@ -1,0 +1,82 @@
+name: Diktant
+options:
+  bundleIdPrefix: com.dmemruk
+  developmentLanguage: ru
+  deploymentTarget:
+    macOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # No Apple Developer account: ad-hoc signing, no hardened runtime (scripts/install.sh re-signs
+    # with the local certificate so Accessibility and Microphone survive rebuilds).
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: NO
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    SWIFT_EMIT_LOC_STRINGS: YES
+packages:
+  # Parakeet on the Neural Engine, linked only into DiktantEngine. No traits: TTS, diarization and
+  # the NeMo text normalizer are left out (only ASR is needed).
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio
+    from: 0.17.7
+    traits: []
+targets:
+  Diktant:
+    type: application
+    platform: macOS
+    sources:
+      - Diktant
+    dependencies:
+      # The model runs in this helper (Contents/MacOS/DiktantEngine), see DiktantEngine/main.swift.
+      - target: DiktantEngine
+        embed: true
+        copy:
+          destination: executables
+    info:
+      path: Diktant/Info.plist
+      properties:
+        CFBundleDisplayName: Diktant
+        CFBundleDevelopmentRegion: ru
+        # English is planned: add translations to Localizable.xcstrings and "en" here.
+        CFBundleLocalizations: [ru]
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.productivity
+        NSMicrophoneUsageDescription: Diktant записывает голос, пока вы диктуете, и превращает его в текст.
+        # Menu bar only, no Dock icon.
+        LSUIElement: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.Diktant
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    scheme:
+      testTargets:
+        - DiktantTests
+  # Runs Parakeet in its own process, which exits when the model is unloaded.
+  DiktantEngine:
+    type: tool
+    platform: macOS
+    sources:
+      - DiktantEngine
+    dependencies:
+      - package: FluidAudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.DiktantEngine
+        SKIP_INSTALL: YES
+  # Unit tests of the pure logic: hybrid hotkey, shortcuts, word counting, history and statistics.
+  DiktantTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/DiktantTests
+    dependencies:
+      - target: Diktant
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.DiktantTests
+        GENERATE_INFOPLIST_FILE: YES

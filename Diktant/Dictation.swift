@@ -1,0 +1,165 @@
+import AppKit
+
+/// The dictation cycle: key press → record (the model loads meanwhile) → release or second press →
+/// transcribe → paste into the app that was in front → history.
+@MainActor
+final class Dictation: ObservableObject {
+    static let shared = Dictation()
+
+    enum Phase: Equatable {
+        case idle, recording, transcribing
+    }
+
+    @Published private(set) var phase: Phase = .idle {
+        didSet { onPhase?(phase) }
+    }
+    var onPhase: ((Phase) -> Void)?
+
+    private var press = HybridPress()
+    private let recorder = AudioRecorder()
+    private var startedAt = Date()
+    private var targetApp: NSRunningApplication?
+    private var job: Task<Void, Never>?
+
+    /// Shorter recordings are a slip of the finger: dropped without a sound.
+    static let minimumDuration: TimeInterval = 0.3
+
+    func start() {
+        let keys = HotkeyMonitor.shared
+        keys.onPress = { [weak self] in self?.keyDown() }
+        keys.onRelease = { [weak self] in self?.keyUp() }
+        keys.onEscape = { [weak self] in self?.cancel(reason: "Esc") }
+        keys.onChord = { [weak self] in self?.cancel(reason: "chord") }
+        recorder.onLevel = { Indicator.shared.level($0) }
+        keys.start()
+    }
+
+    private func keyDown() {
+        let now = ProcessInfo.processInfo.systemUptime
+        if phase == .transcribing { return } // one at a time
+        switch press.keyDown(at: now) {
+        case .start: begin()
+        case .stop: finish()
+        case .none: break
+        }
+    }
+
+    private func keyUp() {
+        if press.keyUp(at: ProcessInfo.processInfo.systemUptime) == .stop { finish() }
+    }
+
+    private func begin() {
+        if let problem = EngineStore.shared.problem {
+            press.reset()
+            Indicator.shared.show(.message(problem))
+            Log.warning("Dictation not started: \(problem)", "dictation")
+            return
+        }
+        guard AudioRecorder.permission != .denied, AudioRecorder.permission != .restricted else {
+            press.reset()
+            Indicator.shared.show(.message(String(localized: "Нет доступа к микрофону")))
+            return
+        }
+        if AudioRecorder.permission == .notDetermined {
+            press.reset()
+            Task { _ = await AudioRecorder.requestPermission() }
+            return
+        }
+        targetApp = NSWorkspace.shared.frontmostApplication
+        do {
+            try recorder.start()
+        } catch {
+            press.reset()
+            Indicator.shared.show(.message(String(localized: "Микрофон не запустился")))
+            Log.error("Recording failed to start: \(Log.describe(error))", "dictation")
+            return
+        }
+        let started = Date()
+        startedAt = started
+        phase = .recording
+        HotkeyMonitor.shared.watchKeys(true)
+        // A modifier may turn out to be ⌥+key a moment later: no sound or pill for that.
+        let delay = HotkeyMonitor.shared.shortcut.isModifierOnly ? 0.15 : 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            MainActor.assumeIsolated {
+                guard self.phase == .recording, self.startedAt == started else { return }
+                Sounds.play(.start)
+                Indicator.shared.show(.recording(since: started))
+            }
+        }
+        EngineStore.shared.prepare()
+        Log.info("Recording into \(targetApp?.localizedName ?? "?")", "dictation")
+    }
+
+    private func finish() {
+        guard phase == .recording else { return }
+        HotkeyMonitor.shared.watchKeys(false)
+        let samples = recorder.stop()
+        let duration = Double(samples.count) / AudioRecorder.sampleRate
+        Sounds.play(.stop)
+        guard duration >= Self.minimumDuration else {
+            phase = .idle
+            Indicator.shared.hide()
+            Log.info(String(format: "Recording too short (%.2f s): dropped", duration), "dictation")
+            return
+        }
+        phase = .transcribing
+        Indicator.shared.show(.transcribing)
+        let target = targetApp
+        let model = EngineStore.shared.currentModelName
+        job = Task {
+            let start = Date()
+            do {
+                let raw = try await EngineStore.shared.transcribe(samples)
+                guard !Task.isCancelled else { return }
+                let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                Log.info(String(format: "Transcribed %.1f s of audio in %.2f s: %d words", duration,
+                                Date().timeIntervalSince(start), Words.count(text)), "dictation")
+                phase = .idle
+                if text.isEmpty {
+                    Indicator.shared.show(.message(String(localized: "Ничего не распознано")))
+                    return
+                }
+                Indicator.shared.hide()
+                if Paster.paste(text) == false {
+                    Indicator.shared.show(.message(String(localized: "Текст в буфере: нет доступа «Универсальный доступ»")))
+                }
+                History.shared.add(text: text, duration: duration, appBundle: target?.bundleIdentifier ?? "",
+                                   appName: target?.localizedName ?? "", model: model)
+            } catch {
+                phase = .idle
+                Indicator.shared.show(.message(String(localized: "Ошибка распознавания")))
+                Log.error("Transcription failed: \(Log.describe(error))", "dictation")
+            }
+            Memory.giveBackSoon()
+        }
+    }
+
+    /// Esc, or the dictation modifier turned out to be part of a shortcut (⌥+key).
+    private func cancel(reason: String) {
+        guard phase == .recording else { return }
+        HotkeyMonitor.shared.watchKeys(false)
+        recorder.stop()
+        press.reset()
+        phase = .idle
+        Indicator.shared.hide()
+        if reason == "Esc" { Sounds.play(.cancel) }
+        Log.info("Recording cancelled (\(reason))", "dictation")
+    }
+}
+
+/// Short system sounds for start and stop (switch "Звук начала и конца записи").
+enum Sounds {
+    enum Kind { case start, stop, cancel }
+
+    static func play(_ kind: Kind) {
+        guard Prefs.sounds else { return }
+        let name: String
+        switch kind {
+        case .start: name = "Tink"
+        case .stop: name = "Pop"
+        case .cancel: name = "Funk"
+        }
+        NSSound(named: NSSound.Name(name))?.play()
+    }
+}
