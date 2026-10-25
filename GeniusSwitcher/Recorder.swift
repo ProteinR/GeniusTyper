@@ -1,17 +1,20 @@
 import Foundation
 
-/// Turns what the tracker saw into journal entries (no text) and runs the shadow detector.
+/// Turns what the tracker saw into journal entries (no text) and runs the shadow detector. Manual
+/// wrong-layout fixes and false alarms also go to `wordEvents` with their words (`WordLogEntry`).
 struct Recorder {
     let renderer: LayoutRendering
     let detector: LayoutDetector
 
     /// Words the detector would have switched, waiting to see whether the user fixes them.
-    private var flagged: [Int: (time: TimeInterval, app: String?, language: String, length: Int)] = [:]
+    private var flagged: [Int: (time: TimeInterval, app: String?, language: String, keys: [TypedKey])] = [:]
     /// A flagged word not rewritten within this time counts as a detector false alarm.
     static let flagWindow: TimeInterval = 20
 
     /// The last wrong-layout fixes as text ("ghbdtn → привет"), for the menu only: never saved.
     private(set) var recentFixes: [String] = []
+    /// Fixes with their words, taken by the observer (`takeWordEvents`) for the words log.
+    private(set) var wordEvents: [WordLogEntry] = []
 
     init(renderer: LayoutRendering, detector: LayoutDetector) {
         self.renderer = renderer
@@ -32,11 +35,19 @@ struct Recorder {
         let old = flagged.filter { now - $0.value.time >= Self.flagWindow }
         old.keys.forEach { flagged.removeValue(forKey: $0) }
         return old.values.sorted { $0.time < $1.time }.map { value in
-            var entry = JournalEntry(t: Date(timeIntervalSince1970: value.time), kind: .flagKept, app: value.app)
+            let date = Date(timeIntervalSince1970: value.time)
+            var entry = JournalEntry(t: date, kind: .flagKept, app: value.app)
             entry.lang = value.language
-            entry.len = value.length
+            entry.len = value.keys.count
+            wordEvents.append(WordLogEntry(t: date, kind: .flagKept, app: value.app,
+                                           typed: renderer.text(value.keys, language: value.language), verdict: .fix))
             return entry
         }
+    }
+
+    mutating func takeWordEvents() -> [WordLogEntry] {
+        defer { wordEvents = [] }
+        return wordEvents
     }
 
     /// The auto-fixer changed this word: it is not a false alarm.
@@ -53,7 +64,7 @@ struct Recorder {
         let verdict = detector.verdict(word.keys, language: word.language, renderer: renderer)
         entry.verdict = verdict
         if verdict == .fix {
-            flagged[word.id] = (word.time, app, word.language, word.keys.count)
+            flagged[word.id] = (word.time, app, word.language, word.keys)
         }
         return entry
     }
@@ -78,6 +89,9 @@ struct Recorder {
         if entry.isWrongLayoutFix, let from = entry.from, let to = entry.to {
             let example = "\(renderer.text(rewrite.erasedKeys, language: from)) → \(renderer.text(rewrite.retypedKeys, language: to))"
             recentFixes = Array(([example] + recentFixes).prefix(5))
+            wordEvents.append(WordLogEntry(t: entry.t, kind: .rewrite, app: app,
+                                           typed: renderer.text(rewrite.erasedKeys, language: from),
+                                           result: renderer.text(rewrite.retypedKeys, language: to), verdict: entry.verdict))
         }
         return entry
     }

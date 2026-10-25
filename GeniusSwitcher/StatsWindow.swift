@@ -52,16 +52,25 @@ private struct StatsPanel: View {
             Divider()
 
             HStack {
-                Button("Открыть журнал") { NSWorkspace.shared.open(Journal.directory) }
+                Button("Открыть журнал") { NSWorkspace.shared.open(Journal.base) }
                 Button("Удалить журнал…") { confirmDelete = true }
             }
             Text("В журнал пишутся только раскладки, длины слов и действия, без текста.")
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Toggle("Записывать слова исправлений", isOn: $observer.wordLog)
+                Spacer()
+                Button("Удалить слова") { observer.deleteWordLog() }
+                    .controlSize(.small)
+            }
+            Text("Только исправленные слова (автоматически, Caps Lock, вручную) и ложные срабатывания, в папку words, \(Journal.wordsDays) дней. Обычный набор не пишется, в терминалах и редакторах кода — тоже.")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .frame(width: 420)
-        .alert("Удалить весь журнал?", isPresented: $confirmDelete) {
+        .alert("Удалить весь журнал (и слова)?", isPresented: $confirmDelete) {
             Button("Удалить", role: .destructive) { observer.deleteJournal() }
             Button("Отмена", role: .cancel) {}
         }

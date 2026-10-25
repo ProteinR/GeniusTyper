@@ -121,23 +121,45 @@ struct DayStats: Equatable {
     }
 }
 
+/// One fix with its words, for finding what the detector gets wrong ("rtl" fixed into "кед", "ии"
+/// into "bb"). Unlike `JournalEntry` this is text, so only fixes go here, never plain typing, and
+/// never from the apps where auto-fix is off (terminals, code editors: a password retyped in the
+/// other layout must not end up in a file). Off with the switch in the statistics window.
+struct WordLogEntry: Codable, Equatable {
+    var t: Date
+    var kind: JournalEntry.Kind
+    var app: String?
+    /// The word (or phrase) as it was on screen before the fix.
+    var typed: String
+    /// After the fix; nil when nothing changed (flagKept, autoSkip).
+    var result: String?
+    /// For a manual fix or a word the detector flagged: what the detector said about `typed`.
+    var verdict: Verdict?
+}
+
 /// `~/Library/Application Support/GeniusSwitcher/journal/YYYY-MM-DD.jsonl`, one JSON object per line,
-/// kept for 90 days.
+/// kept for 90 days; fixes with their words in `words/`, kept for 30 days.
 final class Journal {
-    static let directory: URL = {
-        let base = AppDelegate.isRunningTests
-            ? FileManager.default.temporaryDirectory.appendingPathComponent("GeniusSwitcherTests", isDirectory: true)
-            : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("GeniusSwitcher", isDirectory: true)
-        let dir = base.appendingPathComponent("journal", isDirectory: true)
+    static let base: URL = AppDelegate.isRunningTests
+        ? FileManager.default.temporaryDirectory.appendingPathComponent("GeniusSwitcherTests", isDirectory: true)
+        : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("GeniusSwitcher", isDirectory: true)
+    static let directory = folder("journal")
+    static let wordsDirectory = folder("words")
+    static let wordsDays = 30
+
+    private static func folder(_ name: String) -> URL {
+        let dir = base.appendingPathComponent(name, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
-    }()
+    }
 
     private let queue = DispatchQueue(label: "com.dmemruk.GeniusSwitcher.journal")
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
+        // Words with "/" stay as typed in the words log.
+        encoder.outputFormatting = [.withoutEscapingSlashes]
         return encoder
     }()
     private static let dayFormat: DateFormatter = {
@@ -147,17 +169,26 @@ final class Journal {
         return formatter
     }()
 
-    static func file(for date: Date) -> URL {
+    static func file(for date: Date, in directory: URL = directory) -> URL {
         directory.appendingPathComponent("\(dayFormat.string(from: date)).jsonl")
     }
 
     func append(_ entries: [JournalEntry]) {
-        guard !entries.isEmpty else { return }
-        let lines = entries.compactMap { entry -> (URL, Data)? in
-            guard var data = try? encoder.encode(entry) else { return nil }
-            data.append(0x0A)
-            return (Self.file(for: entry.t), data)
-        }
+        write(entries.compactMap { entry in line(entry).map { (Self.file(for: entry.t), $0) } })
+    }
+
+    func append(words entries: [WordLogEntry]) {
+        write(entries.compactMap { entry in line(entry).map { (Self.file(for: entry.t, in: Self.wordsDirectory), $0) } })
+    }
+
+    private func line(_ entry: some Encodable) -> Data? {
+        guard var data = try? encoder.encode(entry) else { return nil }
+        data.append(0x0A)
+        return data
+    }
+
+    private func write(_ lines: [(URL, Data)]) {
+        guard !lines.isEmpty else { return }
         queue.async {
             for (url, data) in lines {
                 if let handle = try? FileHandle(forWritingTo: url) {
@@ -179,6 +210,11 @@ final class Journal {
     }
 
     static func prune(keepingDays days: Int = 90) {
+        prune(directory, days: days)
+        prune(wordsDirectory, days: wordsDays)
+    }
+
+    private static func prune(_ directory: URL, days: Int) {
         let cutoff = Date().addingTimeInterval(-Double(days) * 86_400)
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         for file in files {
@@ -188,9 +224,15 @@ final class Journal {
     }
 
     func deleteAll() {
-        queue.async {
-            let files = (try? FileManager.default.contentsOfDirectory(at: Self.directory, includingPropertiesForKeys: nil)) ?? []
-            files.forEach { try? FileManager.default.removeItem(at: $0) }
-        }
+        queue.async { [Self.directory, Self.wordsDirectory].forEach(Self.deleteFiles(in:)) }
+    }
+
+    func deleteWords() {
+        queue.async { Self.deleteFiles(in: Self.wordsDirectory) }
+    }
+
+    private static func deleteFiles(in directory: URL) {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        files.forEach { try? FileManager.default.removeItem(at: $0) }
     }
 }

@@ -251,6 +251,11 @@ final class RecorderTests: XCTestCase {
         XCTAssertEqual(entry.verdict, .fix)
         XCTAssertEqual(entry.noticeSec, 1.2)
         XCTAssertEqual(recorder.recentFixes, ["ghbdtn → привет"])
+        let words = recorder.takeWordEvents()
+        XCTAssertEqual(words.map(\.typed), ["ghbdtn"])
+        XCTAssertEqual(words.map(\.result), ["привет"])
+        XCTAssertEqual(words.first?.verdict, .fix)
+        XCTAssertTrue(recorder.takeWordEvents().isEmpty)
         var stats = DayStats()
         stats.add(entry)
         XCTAssertEqual(stats.wrongLayoutFixes, 1)
@@ -273,6 +278,15 @@ final class RecorderTests: XCTestCase {
         _ = recorder.record([.word(word)], app: nil)
         XCTAssertTrue(recorder.expire(now: 110).isEmpty)
         XCTAssertEqual(recorder.expire(now: 121).map(\.kind), [.flagKept])
+        // The word itself goes only to the words log, never to the journal entry.
+        XCTAssertEqual(recorder.takeWordEvents().map(\.typed), ["ghbdtn"])
+    }
+
+    func testPlainWordsDoNotReachTheWordsLog() {
+        var recorder = recorder()
+        let word = FinishedWord(id: 1, keys: FakeLayouts.keys(davai), language: "ru", mixed: false, endedBy: " ", time: 5)
+        _ = recorder.record([.word(word)], app: "app")
+        XCTAssertTrue(recorder.takeWordEvents().isEmpty)
     }
 
     func testFlaggedWordFixedIsNotFalseAlarm() {

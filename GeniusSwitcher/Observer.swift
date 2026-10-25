@@ -44,6 +44,11 @@ final class Observer: ObservableObject {
         }
     }
 
+    /// Write fixes with their words to `words/` (`WordLogEntry`), for analysing the detector.
+    @Published var wordLog: Bool {
+        didSet { UserDefaults.standard.set(wordLog, forKey: "wordLog") }
+    }
+
     /// Accessibility: Genius Switcher may type (needed for auto-fix only).
     @Published private(set) var canPost = KeyPoster.canPost
 
@@ -105,6 +110,7 @@ final class Observer: ObservableObject {
         excludedApps = (defaults.array(forKey: "excludedApps") as? [String]).map(Set.init) ?? Self.defaultExcluded
         autoFix = defaults.object(forKey: "autoFix") as? Bool ?? true
         yoFix = defaults.object(forKey: "yoFix") as? Bool ?? true
+        wordLog = defaults.object(forKey: "wordLog") as? Bool ?? true
         autoOffApps = (defaults.array(forKey: "autoOffApps") as? [String]).map(Set.init) ?? AutoFixRules.defaultOff
         exceptions = FixExceptions(hashes: Set(defaults.array(forKey: "fixExceptions") as? [String] ?? []))
         exceptionCount = exceptions.hashes.count
@@ -213,6 +219,11 @@ final class Observer: ObservableObject {
     func setExcluded(_ bundleID: String, _ excluded: Bool) {
         if excluded { excludedApps.insert(bundleID) } else { excludedApps.remove(bundleID) }
         reset()
+    }
+
+    func deleteWordLog() {
+        journal.deleteWords()
+        Log.info("Words log deleted by the user", "journal")
     }
 
     func deleteJournal() {
@@ -378,7 +389,7 @@ final class Observer: ObservableObject {
     // MARK: - Auto-fix
 
     private func autoFixIfNeeded(_ outputs: [TrackerOutput], separator: (key: TypedKey, typed: String), keep: Bool, time: TimeInterval) {
-        guard canPost, !(currentApp.map(autoOffApps.contains) ?? false) else { return }
+        guard canPost, !isAutoOff(currentApp) else { return }
         guard let word = outputs.lazy.compactMap({ output -> FinishedWord? in
             if case let .word(word) = output { return word } else { return nil }
         }).first,
@@ -392,6 +403,8 @@ final class Observer: ObservableObject {
                 entry.from = word.language
                 entry.len = word.keys.count
                 write([entry])
+                logWords(.autoSkip, typed: layouts.text(word.keys, language: word.language),
+                         result: layouts.text(word.keys, language: target), time: time)
                 if skips.register(FixExceptions.hash(word.keys, language: word.language)) {
                     suggestException(word.keys, language: word.language)
                 }
@@ -430,6 +443,7 @@ final class Observer: ObservableObject {
         entry.to = target
         entry.len = word.keys.count
         write([entry])
+        logWords(.autoFix, typed: original, result: fixed, time: time)
         Log.debug("Auto-fix \(word.language)→\(target), \(word.keys.count) keys" + (letters.isEmpty ? "" : " + \(letters.count) one-letter"), "auto")
     }
 
@@ -455,6 +469,7 @@ final class Observer: ObservableObject {
         var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .yoFix, app: currentApp)
         entry.len = word.keys.count
         write([entry])
+        logWords(.yoFix, typed: original, result: fixed, time: time)
         Log.debug("ё restored, \(word.keys.count) keys", "yo")
     }
 
@@ -480,6 +495,7 @@ final class Observer: ObservableObject {
         entry.to = fix.originalLanguage
         entry.len = fix.keys.count
         write([entry])
+        logWords(kind, typed: fix.fixed, result: fix.original)
         Log.info("Auto-fix undone", "auto")
         return true
     }
@@ -509,6 +525,7 @@ final class Observer: ObservableObject {
         entry.to = target
         entry.len = parts.count
         write([entry])
+        logWords(.phraseFix, typed: original, result: fixed, time: now)
         Log.debug("Caps Lock twice: phrase of \(parts.count) characters → \(target)", "auto")
         return true
     }
@@ -535,6 +552,7 @@ final class Observer: ObservableObject {
         entry.to = target
         entry.len = word.keys.count
         write([entry])
+        logWords(.capsFix, typed: typed, result: retyped, time: now)
         Log.debug("Caps Lock mid-word: \(word.keys.count) keys retyped \(word.language)→\(target)", "auto")
         return true
     }
@@ -592,6 +610,22 @@ final class Observer: ObservableObject {
         }
         entries.forEach { typing.stats.add($0); typing.weekStats.add($0) }
         if recorder.recentFixes != typing.recentFixes { typing.recentFixes = recorder.recentFixes }
+        let words = recorder.takeWordEvents().filter { wordLog && !isAutoOff($0.app) }
+        if !words.isEmpty { journal.append(words: words) }
+    }
+
+    /// A fix with its words for the words log. Not in the apps where auto-fix is off: terminals and
+    /// code editors, where a retyped word may be a password.
+    private func logWords(_ kind: JournalEntry.Kind, typed: String, result: String?,
+                          time: TimeInterval = Date().timeIntervalSince1970) {
+        guard wordLog, !isAutoOff(currentApp) else { return }
+        let trim = { (text: String) in text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        journal.append(words: [WordLogEntry(t: Date(timeIntervalSince1970: time), kind: kind, app: currentApp,
+                                            typed: trim(typed), result: result.map(trim))])
+    }
+
+    private func isAutoOff(_ app: String?) -> Bool {
+        app.map(autoOffApps.contains) ?? false
     }
 }
 

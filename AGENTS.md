@@ -83,6 +83,14 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
 ## Privacy rule
 
 The clipboard history is the exception: it stores what was copied (that is its job), locally only.
+The second exception, asked for by the owner on 2026-10-26: the **words log**
+(`~/Library/Application Support/GeniusSwitcher/words/YYYY-MM-DD.jsonl`, `WordLogEntry`, 30 days):
+only fixes with their words: auto-fix, its undo, ⇧+Space skip, Caps Lock mid-word, Caps Lock twice,
+ё, manual wrong-layout fixes (`rewrite`) and detector false alarms (`flagKept`), each as `typed` →
+`result`. Plain typing is never written, nor anything in the "Не исправлять в" apps (terminals,
+code editors: a password retyped in the other layout must not reach a file). Switch and
+"Удалить слова" in the statistics window; "Удалить журнал" deletes it too. Use it to see which
+words the detector gets wrong.
 The journal never contains text: only layouts, lengths, verdicts, timings and the app bundle ID
 (`JournalEntry`; a test checks that words do not reach the JSON). Letters exist only in memory while
 a word is typed; the menu shows the last 5 fixes as text from memory only. Password managers are
