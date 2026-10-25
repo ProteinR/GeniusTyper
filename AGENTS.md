@@ -84,7 +84,8 @@ Charts / `Canvas` / system `Toggle` (`LightSwitchStyle`), plain-shape bars, `Men
 - Log: `~/Library/Logs/Diktant/diktant.log` (debug lines with `verboseLog` or any `--…-test`).
 
 Build and install: `scripts/install.sh` (deletes `build/` afterwards; `KEEP_BUILD=1` keeps it).
-Icon: `scripts/make-icon.swift`. Sounds: start = system Tink, text pasted = own soft ding
-`Diktant/Sounds/success.wav` (`scripts/make-sounds.swift`; the owner found Pop sounded like a
-failure, so Pop now means nothing recognised / error), Esc = Funk. Version bumped by the pre-commit hook
+Icon: `scripts/make-icon.swift`. Sounds: start = system Tink, text pasted = own single soft
+sine tap at 740 Hz `Diktant/Sounds/success.wav` (`scripts/make-sounds.swift`, in the spirit of
+Claude's voice-mode sounds; a brighter C6 bell with overtones was too sharp for the owner, and
+system Pop sounded like a failure, so Pop now means nothing recognised / error), Esc = Funk. Version bumped by the pre-commit hook
 (`git config core.hooksPath scripts/git-hooks`).
