@@ -1,6 +1,6 @@
 # Genius Switcher: agent guide
 
-App `~/Applications/Genius Switcher.app`, bundle ID `com.dmemruk.GeniusSwitcher`, module and folder
+GitHub: ProteinR/GeniusSwitcher (private, since 2026-10-26). App `~/Applications/Genius Switcher.app`, bundle ID `com.dmemruk.GeniusSwitcher`, module and folder
 `GeniusSwitcher` (renamed from "Switcher" on 2026-10-18; journal and settings were moved over).
 
 Personal macOS menu bar app replacing **Caramba Switcher** (automatic RU/EN layout fixing). It
