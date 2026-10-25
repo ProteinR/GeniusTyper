@@ -96,7 +96,6 @@ final class Dictation: ObservableObject {
         HotkeyMonitor.shared.watchKeys(false)
         let samples = recorder.stop()
         let duration = Double(samples.count) / AudioRecorder.sampleRate
-        Sounds.play(.stop)
         guard duration >= Self.minimumDuration else {
             phase = .idle
             Indicator.shared.hide()
@@ -117,17 +116,22 @@ final class Dictation: ObservableObject {
                                 Date().timeIntervalSince(start), Words.count(text)), "dictation")
                 phase = .idle
                 if text.isEmpty {
+                    Sounds.play(.failure)
                     Indicator.shared.show(.message(String(localized: "Ничего не распознано")))
                     return
                 }
                 Indicator.shared.hide()
-                if Paster.paste(text) == false {
+                if Paster.paste(text) {
+                    Sounds.play(.success)
+                } else {
+                    Sounds.play(.failure)
                     Indicator.shared.show(.message(String(localized: "Текст в буфере: нет доступа «Универсальный доступ»")))
                 }
                 History.shared.add(text: text, duration: duration, appBundle: target?.bundleIdentifier ?? "",
                                    appName: target?.localizedName ?? "", model: model)
             } catch {
                 phase = .idle
+                Sounds.play(.failure)
                 Indicator.shared.show(.message(String(localized: "Ошибка распознавания")))
                 Log.error("Transcription failed: \(Log.describe(error))", "dictation")
             }
@@ -148,18 +152,24 @@ final class Dictation: ObservableObject {
     }
 }
 
-/// Short system sounds for start and stop (switch "Звук начала и конца записи").
+/// Short sounds (switch "Звуки диктовки"): start, text pasted (a soft ding of our own,
+/// `scripts/make-sounds.swift`), failure (nothing recognised, error, no paste), Esc.
 enum Sounds {
-    enum Kind { case start, stop, cancel }
+    enum Kind { case start, success, failure, cancel }
+
+    private static let success = Bundle.main.url(forResource: "success", withExtension: "wav")
+        .flatMap { NSSound(contentsOf: $0, byReference: true) }
 
     static func play(_ kind: Kind) {
         guard Prefs.sounds else { return }
-        let name: String
+        let sound: NSSound?
         switch kind {
-        case .start: name = "Tink"
-        case .stop: name = "Pop"
-        case .cancel: name = "Funk"
+        case .start: sound = NSSound(named: "Tink")
+        case .success: sound = success
+        case .failure: sound = NSSound(named: "Pop")
+        case .cancel: sound = NSSound(named: "Funk")
         }
-        NSSound(named: NSSound.Name(name))?.play()
+        sound?.stop()
+        sound?.play()
     }
 }

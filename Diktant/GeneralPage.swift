@@ -11,7 +11,12 @@ struct GeneralPage: View {
         Form {
             Section("Диктовка") {
                 ShortcutRow()
-                Toggle("Звук начала и конца записи", isOn: $sounds)
+                Toggle(isOn: $sounds) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Звуки диктовки")
+                        Text("Начало записи, вставка текста, ошибка").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Toggle(isOn: $escCancels) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Esc отменяет запись")
