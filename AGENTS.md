@@ -43,9 +43,10 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   no heap. To update: download a newer `safe.txt`, run the script, run the tests.
 - **Exceptions window** (`ExceptionsEditor.swift`; panel "Изменить…", right-click "Исключения…"):
   tab "Слова" = `UserExceptions`, words as typed, never fixed, stored as text in the settings
-  (`userExceptions`), never in the journal; seeded on 2026-10-18 with INVENTIRE abbreviations the
-  detector would fix (rtl, ctx, deps…; 2-letter ones and ones whose Russian side is a common word,
-  dfc = «вас», left out). Tab "Приложения": "Не исправлять в" (`autoOffApps`) and "Не следить в"
+  (`userExceptions`), never in the journal. Only the owner fills it: an agent seeded it on
+  2026-10-18 with INVENTIRE abbreviations (rtl, ctx, deps…) the owner never types, and the owner
+  deleted them as useless; do not add words on your own. On 2026-10-26 it held len, rec, вифи, ии,
+  мд, сиви, смс. Tab "Приложения": "Не исправлять в" (`autoOffApps`) and "Не следить в"
   (`excludedApps`), added from the current app, running apps or Finder. Older undos (before 0.3.0)
   added hashes of the key codes (`FixExceptions`, no text): still honoured, "Сбросить" clears them.
 - **Clipboard history** (replaces Maccy, 2026-10-19; `ClipboardStore.swift`, `ClipboardItem.swift`
@@ -72,7 +73,10 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   layout while the app types in the new one (2026-10-18: "hello" typed in Russian was judged English).
 - `Detector.swift`: detector v0: macOS spell checking in both layouts plus a script
   check (the Russian checker accepts Latin "ok"/"git"). All-caps words of 2–5 letters (RTL, API)
-  are abbreviations: skipped. It is a dictionary, not a model: words missing from it are "unknown"
+  are abbreviations: skipped. The other side must have a vowel (y counts): the English checker
+  accepts "bb", "cvc", "vl" (from ии, смс, мд). The auto-fix (`fixes(_:language:before:)`) also
+  keeps a word of ≤4 keys when the two words before it in the line are real words in the same
+  layout ("сделай мне ии"); one word is not enough ("ok ns" → "ok ты"). It is a dictionary, not a model: words missing from it are "unknown"
   (letter n-grams are the planned next step, after real journal data; journal before 2026-10-20 is
   mostly the owner's testing). Verdicts: keep / fix / ambiguous / unknown /
   skip.

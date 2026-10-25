@@ -41,7 +41,7 @@ struct LayoutDetector {
         if Self.isMixedCase(typed) || Self.isAbbreviation(typed) { return .skip }
 
         let typedValid = Self.isScript(typed, language) && isWord(typed, language)
-        let otherValid = Self.isScript(alternative, other) && isWord(alternative, other)
+        let otherValid = Self.isScript(alternative, other) && Self.hasVowel(alternative) && isWord(alternative, other)
         switch (typedValid, otherValid) {
         case (true, false): return .keep
         case (false, true): return .fix
@@ -49,6 +49,23 @@ struct LayoutDetector {
         case (false, false): return .unknown
         }
     }
+
+    /// The auto-fixer's decision: a `fix` verdict, unless the word is short and the words just
+    /// before it in the line (`before`, nearest first) are real words typed in the same layout.
+    /// "сделай мне ии": "ии" is meant, the user is writing Russian (2026-10-26: ии, смс, мд, сиви,
+    /// вифи were all in the exceptions). One word of context is not enough: "ok ns" is still "ok ты".
+    func fixes(_ keys: [TypedKey], language: String, before: [(keys: [TypedKey], language: String)],
+               renderer: LayoutRendering) -> Bool {
+        guard verdict(keys, language: language, renderer: renderer, trimEdges: false) == .fix else { return false }
+        guard keys.count <= Self.shortWord else { return true }
+        let context = before.prefix(2)
+        return !(context.count == 2 && context.allSatisfy {
+            $0.language == language && verdict($0.keys, language: language, renderer: renderer) == .keep
+        })
+    }
+
+    /// Up to this many keys a word is "short" for `fixes(_:language:before:renderer:)`.
+    static let shortWord = 4
 
     /// Caps Lock in the middle of a word retypes the letters in the other layout, unless they
     /// already are a word where they were typed: then Caps Lock only switches, for what comes next
@@ -65,6 +82,12 @@ struct LayoutDetector {
             default: return false
             }
         }
+    }
+
+    /// A word needs a vowel ("y" counts: "my", "gym"). The English spell checker accepts runs of
+    /// consonants like "bb", "cvc", "vl" (from "ии", "смс", "мд"), which made them look like English.
+    static func hasVowel(_ word: String) -> Bool {
+        word.lowercased().contains { "aeiouyаеёиоуыэюя".contains($0) }
     }
 
     /// "RTL", "DTO", "API": all capitals, 2–5 letters, typed on purpose. "КЕД" for "RTL" is a word,

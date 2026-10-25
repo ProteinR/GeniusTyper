@@ -225,6 +225,40 @@ struct WordTracker {
         return words
     }
 
+    /// The finished words before word `id` in the line (up to `limit`, nearest first), as they
+    /// are on screen now (an auto-fixed word counts in its new layout).
+    func words(before id: Int, limit: Int) -> [(keys: [TypedKey], language: String)] {
+        guard var index = line.firstIndex(where: {
+            if case let .key(_, _, _, wordID) = $0 { return wordID == id } else { return false }
+        }) else { return [] }
+        var words: [(keys: [TypedKey], language: String)] = []
+        var keys: [TypedKey] = []
+        var language = ""
+        var currentID: Int?
+        while index > 0, words.count < limit {
+            index -= 1
+            switch line[index] {
+            case let .key(key, keyLanguage, _, wordID?):
+                if wordID != currentID, !keys.isEmpty {
+                    words.append((keys, language))
+                    keys = []
+                }
+                currentID = wordID
+                keys.insert(key, at: 0)
+                language = keyLanguage
+            case .key:
+                continue
+            case let .separator(character):
+                if !keys.isEmpty { words.append((keys, language)) }
+                keys = []
+                currentID = nil
+                if character == "\n" { return Array(words.prefix(limit)) }
+            }
+        }
+        if !keys.isEmpty { words.append((keys, language)) }
+        return Array(words.prefix(limit))
+    }
+
     // MARK: - Internals
 
     private mutating func startRewritingIfErased() {

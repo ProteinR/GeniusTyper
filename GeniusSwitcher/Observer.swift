@@ -397,7 +397,8 @@ final class Observer: ObservableObject {
         if autoFix, let target = layouts.other(than: word.language),
            !exceptions.contains(word.keys, language: word.language),
            !userExceptions.contains(word.keys, language: word.language, renderer: layouts),
-           LayoutDetector.system.verdict(word.keys, language: word.language, renderer: layouts, trimEdges: false) == .fix {
+           LayoutDetector.system.fixes(word.keys, language: word.language,
+                                       before: tracker.words(before: word.id, limit: 2), renderer: layouts) {
             if keep {
                 var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .autoSkip, app: currentApp)
                 entry.from = word.language

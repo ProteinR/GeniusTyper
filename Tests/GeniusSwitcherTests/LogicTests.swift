@@ -179,6 +179,26 @@ final class WordTrackerTests: XCTestCase {
         XCTAssertEqual(words(space()).first?.mixed, true)
     }
 
+    func testWordsBeforeAWord() {
+        var tracker = WordTracker(renderer: FakeLayouts())
+        func type(_ codes: [UInt16], _ language: String) -> [TrackerOutput] {
+            for key in FakeLayouts.keys(codes) {
+                _ = tracker.key(key, typed: String(FakeLayouts().character(key, language: language)!), language: language, time: 1)
+            }
+            return tracker.separator(" ", time: 1)
+        }
+        _ = tracker.separator("\n", time: 0)
+        _ = type(privet, "en")
+        _ = tracker.separator("\n", time: 1)
+        _ = type(davai, "ru")
+        _ = type([31, 40], "en")
+        guard case let .word(last)? = type([11, 11], "ru").first else { return XCTFail() }
+        let before = tracker.words(before: last.id, limit: 5)
+        // Nearest first, stopping at the line break: "щл"/"ok", then "давай"; not "ghbdtn".
+        XCTAssertEqual(before.map(\.language), ["en", "ru"])
+        XCTAssertEqual(before.map(\.keys.count), [2, 5])
+    }
+
     func testCurrentWordRetypedMidWordStaysOneWord() {
         type([5, 4, 11], "en")
         XCTAssertEqual(tracker.currentWord?.keys.count, 3)
@@ -330,6 +350,32 @@ final class AutoFixTests: XCTestCase {
         // "ghbdtn" and the unfinished "ghb": retyped.
         XCTAssertTrue(detector.retypesOnCapsLock(FakeLayouts.keys(privet), language: "en", renderer: FakeLayouts()))
         XCTAssertTrue(detector.retypesOnCapsLock(FakeLayouts.keys(Array(privet.prefix(3))), language: "en", renderer: FakeLayouts()))
+    }
+
+    func testConsonantsOnlyAreNotATarget() {
+        // "ии" typed in Russian is "bb" in English: the spell checker may accept it, still no fix.
+        let detector = LayoutDetector { word, _ in ["bb", "ok"].contains(word) }
+        XCTAssertEqual(detector.verdict(FakeLayouts.keys([11, 11]), language: "ru", renderer: FakeLayouts()), .unknown)
+        XCTAssertFalse(LayoutDetector.hasVowel("cvc"))
+        XCTAssertTrue(LayoutDetector.hasVowel("gym"))
+        XCTAssertTrue(LayoutDetector.hasVowel("смс") == false && LayoutDetector.hasVowel("ты"))
+    }
+
+    func testShortWordInsideARightPhraseIsKept() {
+        // "щл" typed in Russian is "ok": fixed alone or after one word, kept after two Russian words.
+        let detector = LayoutDetector { word, _ in ["давай", "ok"].contains(word) }
+        let ok = FakeLayouts.keys([31, 40])
+        let davaiRu = (keys: FakeLayouts.keys(davai), language: "ru")
+        XCTAssertTrue(detector.fixes(ok, language: "ru", before: [], renderer: FakeLayouts()))
+        XCTAssertTrue(detector.fixes(ok, language: "ru", before: [davaiRu], renderer: FakeLayouts()))
+        XCTAssertFalse(detector.fixes(ok, language: "ru", before: [davaiRu, davaiRu], renderer: FakeLayouts()))
+        // The words before were in the other layout: the short word is the odd one, fix it.
+        let davaiEn = (keys: FakeLayouts.keys(davai), language: "en")
+        XCTAssertTrue(detector.fixes(ok, language: "ru", before: [davaiEn, davaiEn], renderer: FakeLayouts()))
+        // Long words do not look at the context: "ghbdtn" after two English words is still "привет".
+        let privetDetector = LayoutDetector { word, _ in ["привет", "ok"].contains(word) }
+        let okEn = (keys: ok, language: "en")
+        XCTAssertTrue(privetDetector.fixes(FakeLayouts.keys(privet), language: "en", before: [okEn, okEn], renderer: FakeLayouts()))
     }
 
     func testOneLetterWordFollows() {
