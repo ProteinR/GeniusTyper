@@ -7,7 +7,8 @@ owner uses. Swift, xcodegen (`project.yml`), ad-hoc signed and re-signed with th
 
 ## Spec (agreed 2026-10-26, not implemented yet)
 
-- **Hotkey: Right Option, hybrid.** Hold = push-to-talk (release stops and inserts); short press =
+- **Hotkey: Right Option by default, rebindable in settings** (a single modifier such as right
+  ⌥ / right ⌘ / Fn, or a key with modifiers; key codes, so it works in any layout). Hybrid: hold = push-to-talk (release stops and inserts); short press =
   toggle (dictate as long as needed, press again to stop and insert). Esc while recording cancels
   without inserting. Short start/stop sounds.
 - **Engine: NVIDIA Parakeet TDT 0.6B v3** on device (CoreML / Neural Engine, via FluidAudio),
