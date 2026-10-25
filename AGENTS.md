@@ -20,5 +20,22 @@ owner uses. Swift, xcodegen (`project.yml`), ad-hoc signed and re-signed with th
 - **Statistics:** words total, by app, by model; WPM, time saved.
 - **Settings:** launch at login; app language (architecture for RU and EN, only RU implemented).
 - **Menu bar icon** (`StatusItemController`); right click → "Завершить".
+- **Light on memory and CPU**, as MXCtl, Genius Switcher and MeetRec were made (their
+  `PROFILING.md`, `scripts/profile.py`, `--stress-test`). Baseline to beat, measured 2026-10-26:
+  TypeWhisper ~113 MB + widget extension ~30 MB idle.
+  - Idle: no timers or polling, ~0 wake-ups, 0.00 % CPU; only the Right Option listener (flags
+    changes only, not every key). Target ≤ ~20–25 MB idle.
+  - The model is the big cost (hundreds of MB): it is loaded when recording starts (in parallel
+    with speaking, so no wait) and unloaded after a few minutes without dictation (setting, default
+    5 min). Microphone engine runs only while recording, then is torn down.
+  - Indicator: own lightweight `NSPanel`, ordered out and its views freed when idle; no level
+    animation while hidden.
+  - Settings/statistics/history window: created on open, released on close. Lessons from MXCtl:
+    no Swift Charts / `Canvas` / system `Toggle` in a `Form` (≈100 MB graphics memory on macOS 26),
+    charts drawn with AppKit into an `NSImage`, `Menu` instead of `Picker`, no `TabView` around
+    long lists, `sizingOptions` off. History is paged from disk (SQLite), not held in memory;
+    statistics are aggregated in the store, not by loading all entries.
+  - Measure before/after with a stress test (repeated dictations, window open/close: footprint
+    must stay flat) and record results in `PROFILING.md`.
 - Not needed: workflows, logins, file transcription, recorder, speakers, dictionary, snippets,
   translation, sync.
