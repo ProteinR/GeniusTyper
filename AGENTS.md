@@ -51,7 +51,8 @@ Local git only. Started 2026-10-26.
 - **Menu bar icon** (`StatusItemController`): mic; red mic.fill while recording; left click opens
   settings, right click: Настройки…, История…, Завершить Diktant.
 - **App language**: architecture only. Strings go through `String(localized:)` /
-  `LocalizedStringKey`, `Localizable.xcstrings` (source ru) is filled by the build; to add English,
+  `LocalizedStringKey`; `Localizable.xcstrings` (source ru) is still empty: Xcode fills it with the
+  strings when the project is built in the IDE (xcodebuild does not). To add English,
   translate there, add "en" to `CFBundleLocalizations` and enable the menu item (MeetRec's
   `AppLanguage` shows the restart flow).
 
