@@ -1,7 +1,7 @@
 import AppKit
 
-/// The menu bar icon: left click opens the settings window, right click a small menu ending with
-/// "Завершить Diktant". Red while recording.
+/// The menu bar icon: left click opens `MenuPanel` (Telegram voices, history, last dictations),
+/// right click a small menu with the settings and "Завершить Diktant". Red while recording.
 ///
 /// Made by hand rather than with SwiftUI's `MenuBarExtra`: when the icon is turned off in System
 /// Settings → Menu Bar, a `MenuBarExtra`-only app quits right after launch.
@@ -36,20 +36,20 @@ final class StatusItemController: NSObject {
     @objc private func clicked() {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            MenuPanel.shared.close()
             showMenu()
-        } else {
-            SettingsWindow.shared.show()
+        } else if let button = statusItem.button {
+            MenuPanel.shared.toggle(under: button)
         }
+    }
+
+    /// `--menu [voices|history]`: the left-click panel at launch, for screenshots.
+    func openPanel(side: String? = nil) {
+        if let button = statusItem.button { MenuPanel.shared.show(under: button, side: side) }
     }
 
     private func showMenu() {
         let menu = NSMenu()
-        // First, as the most used item; ⌃⌥V does the same from the keyboard.
-        let voices = NSMenuItem(title: String(localized: "Расшифровать голосовое из Telegram"), action: #selector(openVoices), keyEquivalent: "")
-        voices.target = self
-        voices.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)
-        menu.addItem(voices)
-        menu.addItem(.separator())
         let settings = NSMenuItem(title: String(localized: "Настройки…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -58,7 +58,7 @@ final class StatusItemController: NSObject {
         menu.addItem(history)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: String(localized: "Завершить Diktant"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-        // Attached only for this click, so a left click still opens the window.
+        // Attached only for this click, so a left click still opens the panel.
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
@@ -66,5 +66,4 @@ final class StatusItemController: NSObject {
 
     @objc private func openSettings() { SettingsWindow.shared.show() }
     @objc private func openHistory() { SettingsWindow.shared.show(page: .history) }
-    @objc private func openVoices() { VoicePanel.shared.show() }
 }

@@ -117,7 +117,7 @@ final class VoiceTranscripts: ObservableObject {
     @Published private(set) var problem: String?
 
     /// How many more each "more" (scroll past the end, ↓, the button) adds.
-    static let pageSize = 3
+    nonisolated static let pageSize = 3
 
     private var cache: [String: String] = [:]
     private var candidates: [TelegramVoices.Candidate] = []

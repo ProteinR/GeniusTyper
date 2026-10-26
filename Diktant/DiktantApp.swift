@@ -52,6 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsWindow.shared.show(page: page)
         }
         if CommandLine.arguments.contains("--stress-test") { runStressTest() }
+        // `--menu [voices|history]`: the left-click panel, optionally with a side column open.
+        if let index = CommandLine.arguments.firstIndex(of: "--menu") {
+            let side = CommandLine.arguments.dropFirst(index + 1).first
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { statusItem.openPanel(side: side) }
+        }
         if CommandLine.arguments.contains("--voices") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { VoicePanel.shared.show() }
         }
