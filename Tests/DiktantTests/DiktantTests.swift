@@ -143,3 +143,45 @@ final class WAVTests: XCTestCase {
         XCTAssertEqual(String(data: data[8..<12], encoding: .ascii), "WAVE")
     }
 }
+
+final class TelegramVoicesTests: XCTestCase {
+    private var root: URL!
+
+    override func setUp() {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("tg-\(UUID())", isDirectory: true)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    private func put(_ name: String, _ data: Data, age: TimeInterval, account: String = "account-1") throws {
+        let media = root.appendingPathComponent("\(account)/postbox/media", isDirectory: true)
+        try FileManager.default.createDirectory(at: media, withIntermediateDirectories: true)
+        let url = media.appendingPathComponent(name)
+        try data.write(to: url)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-age)], ofItemAtPath: url.path)
+    }
+
+    func testLatestVoicesNewestFirstSkippingOthers() throws {
+        let voice = try Data(contentsOf: Bundle(for: Self.self).url(forResource: "voice", withExtension: "ogg")!)
+        try put("telegram-cloud-document-old", voice, age: 300)
+        try put("telegram-cloud-document-new", voice, age: 10, account: "account-2")
+        try put("telegram-cloud-photo", Data([0xFF, 0xD8, 0xFF, 0xE0] + [UInt8](repeating: 0, count: 100)), age: 1)
+        try put("telegram-cloud-document-loading", voice, age: 2)
+        try put("telegram-cloud-document-loading_partial", voice, age: 2)
+        try put("accounts-metadata", Data(), age: 0, account: "other")
+
+        let found = TelegramVoices.latest(limit: 3, in: root)
+        XCTAssertEqual(found.map(\.url.lastPathComponent), ["telegram-cloud-document-new", "telegram-cloud-document-old"])
+        XCTAssertEqual(found[0].duration, 2.5, accuracy: 2.0)
+        XCTAssertEqual(TelegramVoices.latest(limit: 1, in: root).count, 1)
+    }
+
+    func testDecodesToSixteenKilohertz() throws {
+        let url = Bundle(for: Self.self).url(forResource: "voice", withExtension: "ogg")!
+        XCTAssertTrue(TelegramVoices.isOggOpus(url))
+        let samples = try AudioRecorder.samples(fromFile: url)
+        XCTAssertGreaterThan(samples.count, 16_000)
+    }
+}

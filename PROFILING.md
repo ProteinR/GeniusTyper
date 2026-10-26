@@ -31,3 +31,8 @@ returned 0 KB: freed small blocks from CoreML/FluidAudio loading, interleaved wi
 macOS never takes back from a running process. Moving FluidAudio into the `DiktantEngine` helper,
 which exits on unload, brought Diktant back to 15–17 MB idle after dictation, and its binary from
 ~40 MB to 2.3 MB.
+
+## Telegram voices popup (0.1.3)
+
+Popup open: 20 MB (Diktant) + the helper while the model is loaded. 9 s voice message transcribed
+in 0.46 s (model start included), 3 s in 0.05 s; reopening shows cached text at once.

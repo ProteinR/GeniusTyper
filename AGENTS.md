@@ -49,7 +49,20 @@ Local git only. Started 2026-10-26.
 - **Settings window** (`SettingsWindow`): Основное (key, sounds, Esc, permissions when missing,
   launch at login, app language), Модель, История, Статистика. Built on open, released on close.
 - **Menu bar icon** (`StatusItemController`): mic; red mic.fill while recording; left click opens
-  settings, right click: Настройки…, История…, Завершить Diktant.
+  settings, right click: Настройки…, История…, Голосовые из Telegram, Завершить Diktant.
+- **Telegram voice messages** (`TelegramVoices`, `VoiceTranscripts`, `VoicePanel`; asked
+  2026-10-26): ⌃⌥V (changeable in Основное; a Carbon hot key with id 2, same handler as the
+  dictation combination) or the menu item "Голосовые из Telegram" opens a popup with the 3 newest
+  voice messages from the official Telegram app's cache
+  (`~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable/account-*/postbox/media`,
+  files without extension; voice = Ogg Opus, checked by the "OggS"/"OpusHead" header, decoded by
+  `AVAudioFile`; `<name>_partial` = still downloading, skipped). Transcribed on opening, newest
+  first, with the current engine; texts of the last few files kept in memory so reopening is
+  instant; nothing goes into the dictation history or statistics (the owner wants only Diktant's
+  own dictation there). The chat a file came from is only in Telegram's encrypted database, so the
+  owner keeps voice auto-download on for private chats only (Telegram → Data and Storage). Video
+  circles (mp4) are not included. `-voicesRoot <folder>` points it at a test folder; `--voices`
+  opens the popup at launch. The owner declined importing TypeWhisper's history (2026-10-26).
 - **App language**: architecture only. Strings go through `String(localized:)` /
   `LocalizedStringKey`; `Localizable.xcstrings` (source ru) is still empty: Xcode fills it with the
   strings when the project is built in the IDE (xcodebuild does not). To add English,
@@ -74,7 +87,8 @@ Charts / `Canvas` / system `Toggle` (`LightSwitchStyle`), plain-shape bars, `Men
 
 ## Checks
 
-- `scripts/test.sh`: unit tests (hybrid key, shortcuts, word count, history and statistics, WAV).
+- `scripts/test.sh`: unit tests (hybrid key, shortcuts, word count, history and statistics, WAV,
+  Telegram voice lookup with `Tests/DiktantTests/Fixtures/voice.ogg`, synthesized speech).
 - `--transcribe-file <audio>`: transcribes a file with the current engine twice, logs text, time,
   footprint of Diktant and the helper (`say -v Milena -o ru.aiff "…"` for Russian speech).
 - `--stress-test`: three rounds of every settings page plus load/transcribe/unload of the model,

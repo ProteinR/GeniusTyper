@@ -88,14 +88,18 @@ struct Shortcut: Codable, Equatable {
     /// Settings key.
     static let defaultsKey = "shortcut"
 
-    static func load(from defaults: UserDefaults = .standard) -> Shortcut {
-        guard let data = defaults.data(forKey: defaultsKey),
-              let shortcut = try? JSONDecoder().decode(Shortcut.self, from: data) else { return .rightOption }
+    /// "Голосовые из Telegram": ⌃⌥V.
+    static let voicesDefaultsKey = "voicesShortcut"
+    static let voicesDefault = Shortcut(keyCode: UInt16(kVK_ANSI_V), modifiers: NSEvent.ModifierFlags([.control, .option]).rawValue)
+
+    static func load(from defaults: UserDefaults = .standard, key: String = defaultsKey, default fallback: Shortcut = .rightOption) -> Shortcut {
+        guard let data = defaults.data(forKey: key),
+              let shortcut = try? JSONDecoder().decode(Shortcut.self, from: data) else { return fallback }
         return shortcut
     }
 
-    func save(to defaults: UserDefaults = .standard) {
-        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: Self.defaultsKey) }
+    func save(to defaults: UserDefaults = .standard, key: String = defaultsKey) {
+        if let data = try? JSONEncoder().encode(self) { defaults.set(data, forKey: key) }
     }
 }
 

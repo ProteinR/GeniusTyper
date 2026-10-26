@@ -52,6 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             SettingsWindow.shared.show(page: page)
         }
         if CommandLine.arguments.contains("--stress-test") { runStressTest() }
+        if CommandLine.arguments.contains("--voices") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { VoicePanel.shared.show() }
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--transcribe-file"), index + 1 < CommandLine.arguments.count {
             transcribeFile(CommandLine.arguments[index + 1])
         }

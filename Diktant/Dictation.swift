@@ -30,6 +30,7 @@ final class Dictation: ObservableObject {
         keys.onRelease = { [weak self] in self?.keyUp() }
         keys.onEscape = { [weak self] in self?.cancel(reason: "Esc") }
         keys.onChord = { [weak self] in self?.cancel(reason: "chord") }
+        keys.onVoices = { VoicePanel.shared.toggle() }
         recorder.onLevel = { Indicator.shared.level($0) }
         keys.start()
     }

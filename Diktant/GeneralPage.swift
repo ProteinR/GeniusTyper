@@ -10,7 +10,7 @@ struct GeneralPage: View {
     var body: some View {
         Form {
             Section("Диктовка") {
-                ShortcutRow()
+                ShortcutRow(kind: .dictation)
                 Toggle(isOn: $sounds) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Звуки диктовки")
@@ -23,6 +23,16 @@ struct GeneralPage: View {
                         Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
                     }
                 }
+            }
+            Section {
+                ShortcutRow(kind: .voices)
+            } header: {
+                Text("Голосовые из Telegram")
+            } footer: {
+                Text("Показывает расшифровку последних голосовых из Telegram. Чтобы туда не попадали голосовые из групп, в Telegram → Настройки → Данные и память → Автозагрузка медиа оставьте голосовые только для личных чатов.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if !accessibility || microphone != .authorized {
                 Section("Доступ") {
@@ -88,13 +98,24 @@ private struct PermissionRow: View {
     }
 }
 
-/// "Клавиша": the current key and "Изменить", which waits for a new one: a modifier pressed and
-/// released alone (right ⌥, right ⌘, Fn…), a key with ⌃/⌥/⌘, or an F-key alone.
+/// A key setting: the current key and "Изменить", which waits for a new one. The dictation key:
+/// a modifier pressed and released alone (right ⌥, right ⌘, Fn…), a key with ⌃/⌥/⌘, or an F-key
+/// alone. "Голосовые из Telegram": a key with ⌃/⌥/⌘ or an F-key (a hot key, no single modifier).
 private struct ShortcutRow: View {
-    @State private var shortcut = HotkeyMonitor.shared.shortcut
+    enum Kind { case dictation, voices }
+
+    let kind: Kind
+    @State private var shortcut: Shortcut
     @State private var recording = false
     @State private var monitor: Any?
     @State private var pendingModifier: UInt16?
+
+    init(kind: Kind) {
+        self.kind = kind
+        _shortcut = State(initialValue: kind == .dictation ? HotkeyMonitor.shared.shortcut : HotkeyMonitor.shared.voicesShortcut)
+    }
+
+    private var defaultShortcut: Shortcut { kind == .dictation ? .rightOption : .voicesDefault }
 
     var body: some View {
         LabeledContent {
@@ -104,15 +125,19 @@ private struct ShortcutRow: View {
                     .padding(.vertical, 2)
                     .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
                 Button(recording ? "Отмена" : "Изменить") { recording ? stop() : start() }
-                if shortcut != .rightOption && !recording {
-                    Button("Сбросить") { save(.rightOption) }
+                if shortcut != defaultShortcut && !recording {
+                    Button("Сбросить") { save(defaultShortcut) }
                 }
             }
         } label: {
-            Text("Клавиша")
-            Text("Удерживайте — диктовка, пока держите. Нажмите коротко — до следующего нажатия.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if kind == .dictation {
+                Text("Клавиша")
+                Text("Удерживайте — диктовка, пока держите. Нажмите коротко — до следующего нажатия.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("Сочетание клавиш")
+            }
         }
         .onDisappear(perform: stop)
     }
@@ -136,13 +161,17 @@ private struct ShortcutRow: View {
 
     private func save(_ new: Shortcut) {
         shortcut = new
-        HotkeyMonitor.shared.setShortcut(new)
+        if kind == .dictation {
+            HotkeyMonitor.shared.setShortcut(new)
+        } else {
+            HotkeyMonitor.shared.setVoicesShortcut(new)
+        }
     }
 
     /// True = the event was used.
     private func handle(_ event: NSEvent) -> Bool {
         if event.type == .flagsChanged {
-            guard let key = Shortcut.modifierKeys[event.keyCode] else { return false }
+            guard kind == .dictation, let key = Shortcut.modifierKeys[event.keyCode] else { return false }
             let down = UInt64(event.modifierFlags.rawValue) & key.deviceMask != 0
             if down {
                 // A second modifier while one is held: a combination is coming, not a single key.

@@ -35,6 +35,7 @@ final class HotkeyMonitor {
 
     func start() {
         install()
+        installVoices()
         // Accessibility granted later: install then (the notification is posted on every change).
         DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.accessibility.api"),
                                                             object: nil, queue: .main) { [weak self] _ in
@@ -119,35 +120,75 @@ final class HotkeyMonitor {
     // MARK: - A key combination
 
     private func installHotKey() {
-        if hotKeyHandler == nil {
-            var types = [EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
-                         EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))]
-            InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
-                let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
-                DispatchQueue.main.async {
-                    MainActor.assumeIsolated {
-                        let monitor = HotkeyMonitor.shared
-                        guard !monitor.isPaused else { return }
+        hotKeyRef = register(shortcut, id: Self.dictationID)
+    }
+
+    /// Carbon hot key ids: the dictation key (when it is a combination) and "Голосовые из Telegram".
+    private static let dictationID: UInt32 = 1
+    private static let voicesID: UInt32 = 2
+
+    /// One handler for both hot keys; it tells them apart by id.
+    private func installHotKeyHandler() {
+        guard hotKeyHandler == nil else { return }
+        var types = [EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+                     EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))]
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+            let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
+            var hotKey = EventHotKeyID()
+            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                              MemoryLayout<EventHotKeyID>.size, nil, &hotKey)
+            let id = hotKey.id
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let monitor = HotkeyMonitor.shared
+                    guard !monitor.isPaused else { return }
+                    if id == HotkeyMonitor.voicesID {
+                        if pressed { monitor.onVoices() }
+                    } else {
                         pressed ? monitor.onPress() : monitor.onRelease()
                     }
                 }
-                return noErr
-            }, 2, &types, nil, &hotKeyHandler)
-        }
+            }
+            return noErr
+        }, 2, &types, nil, &hotKeyHandler)
+    }
+
+    private func register(_ shortcut: Shortcut, id: UInt32) -> EventHotKeyRef? {
+        installHotKeyHandler()
         var carbon: UInt32 = 0
         let flags = shortcut.modifierFlags
         if flags.contains(.command) { carbon |= UInt32(cmdKey) }
         if flags.contains(.shift) { carbon |= UInt32(shiftKey) }
         if flags.contains(.option) { carbon |= UInt32(optionKey) }
         if flags.contains(.control) { carbon |= UInt32(controlKey) }
-        let id = EventHotKeyID(signature: OSType(0x444B_5459), id: 1) // "DKTY"
-        let status = RegisterEventHotKey(UInt32(shortcut.keyCode), carbon, id, GetApplicationEventTarget(), 0, &hotKeyRef)
+        var ref: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(signature: OSType(0x444B_5459), id: id) // "DKTY"
+        let status = RegisterEventHotKey(UInt32(shortcut.keyCode), carbon, hotKeyID, GetApplicationEventTarget(), 0, &ref)
         if status == noErr {
             Log.info("Hot key \(shortcut.title) registered", "keys")
-        } else {
-            hotKeyRef = nil
-            Log.warning("Hot key \(shortcut.title) not registered (\(status)): taken by another app?", "keys")
+            return ref
         }
+        Log.warning("Hot key \(shortcut.title) not registered (\(status)): taken by another app?", "keys")
+        return nil
+    }
+
+    // MARK: - Telegram voice messages
+
+    /// "Голосовые из Telegram" (⌃⌥V by default): a Carbon hot key, no permission needed.
+    var onVoices: () -> Void = {}
+    private(set) var voicesShortcut = Shortcut.load(key: Shortcut.voicesDefaultsKey, default: .voicesDefault)
+    private var voicesRef: EventHotKeyRef?
+
+    func installVoices() {
+        if let voicesRef { UnregisterEventHotKey(voicesRef) }
+        voicesRef = register(voicesShortcut, id: Self.voicesID)
+    }
+
+    func setVoicesShortcut(_ new: Shortcut) {
+        voicesShortcut = new
+        new.save(key: Shortcut.voicesDefaultsKey)
+        Log.info("Telegram voices key: \(new.title)", "keys")
+        installVoices()
     }
 
     // MARK: - While recording

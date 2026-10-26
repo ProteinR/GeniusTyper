@@ -50,6 +50,9 @@ final class StatusItemController: NSObject {
         let history = NSMenuItem(title: String(localized: "История…"), action: #selector(openHistory), keyEquivalent: "")
         history.target = self
         menu.addItem(history)
+        let voices = NSMenuItem(title: String(localized: "Голосовые из Telegram"), action: #selector(openVoices), keyEquivalent: "")
+        voices.target = self
+        menu.addItem(voices)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: String(localized: "Завершить Diktant"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         // Attached only for this click, so a left click still opens the window.
@@ -60,4 +63,5 @@ final class StatusItemController: NSObject {
 
     @objc private func openSettings() { SettingsWindow.shared.show() }
     @objc private func openHistory() { SettingsWindow.shared.show(page: .history) }
+    @objc private func openVoices() { VoicePanel.shared.show() }
 }
