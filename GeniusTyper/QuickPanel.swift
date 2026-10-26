@@ -138,6 +138,8 @@ private struct QuickMenuView: View {
     @ObservedObject private var clipboard = ClipboardStore.shared
     @AppStorage("dictationEnabled") private var dictation = false
     @AppStorage("voicesEnabled") private var voices = true
+    /// Who holds Secure Input, checked when the panel opens.
+    @State private var secureInput = SecureInput.holder()
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -196,6 +198,9 @@ private struct QuickMenuView: View {
             }
             Divider().padding(.vertical, 4)
 
+            if let secureInput {
+                SecureInputRow(holder: secureInput)
+            }
             if missingPermission {
                 MenuRow(icon: "exclamationmark.triangle.fill", title: "Нужны разрешения", tint: .orange) {
                     close()
@@ -263,6 +268,30 @@ private struct MenuRow: View {
             hoverWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
         }
+    }
+}
+
+/// Secure Input is on: the keys (Caps Lock, Esc, the auto-fix) are not seen. Not a button; the
+/// cure is in the text.
+private struct SecureInputRow: View {
+    let holder: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "lock.fill").frame(width: 16).foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Клавиши не видны: защищённый ввод")
+                Text(holder == "loginwindow"
+                     ? "Его не отпустил экран входа. Заблокируйте и разблокируйте экран (⌃⌘Q)"
+                     : "Включён в «\(holder)» (поле пароля?). Пока он включён, Caps Lock и Esc не работают")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

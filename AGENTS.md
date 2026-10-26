@@ -28,7 +28,10 @@ used, and the app registers itself as a login item.
   on hover, 0.3 s, like a submenu), "История буфера" (opens the history window); then
   **"Исправлять текст"** (= not paused: one switch instead of Genius Switcher's separate "Пауза",
   which confused the owner next to "Автоисправление") and under it "в «app in front»"
-  (`autoOffApps`); "Нужны разрешения" when one is missing; "Настройки…", "Завершить". Icon hidden:
+  (`autoOffApps`); "Клавиши не видны: защищённый ввод" while macOS Secure Input is on
+  (`SecureInput.holder()`, checked on opening: key taps then get only modifiers, so Caps Lock,
+  Esc and the auto-fix stop; loginwindow sometimes keeps it after the screen was locked, cure:
+  lock and unlock, 2026-10-26); "Нужны разрешения" when one is missing; "Настройки…", "Завершить". Icon hidden:
   the panel opens at the top right (reopening the app from Spotlight/Finder).
 - **Right click**: Исправлять текст, История буфера, История диктовок…, Настройки…, Завершить.
 - **Settings window** (`SettingsWindow.swift`, `SettingsPages.swift`, `Dictation/DictationPage.swift`;

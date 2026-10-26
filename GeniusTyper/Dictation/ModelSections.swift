@@ -74,7 +74,7 @@ private struct LocalModelRow: View {
                     Text(EngineID.parakeetV3.title)
                     Text("NVIDIA").font(.caption).foregroundStyle(.secondary)
                 }
-                Text("Русский и английский, язык определяется сам · ~470 МБ на диске · Neural Engine")
+                Text("~470 МБ на диске · Neural Engine")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if case .failed(let message) = store.local {
