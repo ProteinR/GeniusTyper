@@ -2,7 +2,8 @@ import AppKit
 
 /// The small dark pill at the bottom centre of the screen (TypeWhisper's "Overlay", "Classic"
 /// theme): red dot, timer and level bars while recording; "Распознаю…" while transcribing; a
-/// short message otherwise. Plain AppKit drawing, no SwiftUI. The window exists only while shown:
+/// short message otherwise; the chosen `Mascot` above it while recording and transcribing.
+/// Plain AppKit drawing, no SwiftUI. The window exists only while shown:
 /// it is built on show and released on hide, and its timer runs only then.
 @MainActor
 final class Indicator {
@@ -16,8 +17,12 @@ final class Indicator {
 
     private var panel: NSPanel?
     private var pill: PillView?
+    private var mascot: MascotView?
     private var timer: Timer?
     private var hideWork: DispatchWorkItem?
+    /// When the voice was last loud: the mascot keeps typing a moment after, through short pauses.
+    private var lastLoud = Date.distantPast
+    private var demoTimer: Timer?
 
     func show(_ state: State) {
         hideWork?.cancel()
@@ -25,6 +30,14 @@ final class Indicator {
         let pill = makeIfNeeded()
         pill.state = state
         if case .recording = state { pill.levels = Array(repeating: 0, count: PillView.barCount) }
+        if case .message = state {
+            removeMascot()
+        } else if mascot == nil, let view = MascotView(Mascot.current) {
+            panel?.contentView?.addSubview(view)
+            panel?.hasShadow = false // a stale shadow of the previous frame would stay around
+            mascot = view
+        }
+        mascot?.typing = false
         place()
         startTimer(for: state)
         if case .message = state {
@@ -40,6 +53,31 @@ final class Indicator {
         pill.levels.removeFirst()
         pill.levels.append(CGFloat(value))
         pill.needsDisplay = true
+        if value > 0.3 { lastLoud = Date() }
+        mascot?.typing = Date().timeIntervalSince(lastLoud) < 0.4
+    }
+
+    /// The pill as when dictating, with made-up speech: 1.5 s talking, 1 s silent, 6 s in all.
+    /// For choosing the animation in the settings and for `--indicator-demo`.
+    func demo() {
+        demoTimer?.invalidate()
+        let started = Date()
+        show(.recording(since: started))
+        let timer = Timer(timeInterval: 1.0 / 12, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                let elapsed = Date().timeIntervalSince(started)
+                // A real dictation started meanwhile: leave it alone.
+                guard let self, elapsed < 6, self.pill?.state == .recording(since: started) else {
+                    timer.invalidate()
+                    if elapsed >= 6, self?.pill?.state == .recording(since: started) { self?.hide() }
+                    return
+                }
+                let talking = elapsed.truncatingRemainder(dividingBy: 2.5) < 1.5
+                self.level(talking ? Float.random(in: 0.4...0.9) : Float.random(in: 0...0.1))
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        demoTimer = timer
     }
 
     func hide() {
@@ -47,6 +85,7 @@ final class Indicator {
         hideWork = nil
         timer?.invalidate()
         timer = nil
+        removeMascot()
         panel?.orderOut(nil)
         panel = nil
         pill = nil
@@ -64,16 +103,30 @@ final class Indicator {
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         let pill = PillView(frame: panel.contentLayoutRect)
-        panel.contentView = pill
+        panel.contentView = NSView(frame: panel.contentLayoutRect)
+        panel.contentView?.addSubview(pill)
         self.panel = panel
         self.pill = pill
         return pill
     }
 
-    /// Bottom centre of the screen with the pointer, above the Dock.
+    private func removeMascot() {
+        mascot?.removeFromSuperview()
+        mascot = nil
+        panel?.hasShadow = true
+    }
+
+    /// Bottom centre of the screen with the pointer, above the Dock; the mascot above the pill.
     private func place() {
         guard let panel, let pill else { return }
-        let size = pill.fittingSize
+        let pillSize = pill.fittingSize
+        var size = pillSize
+        if let mascot {
+            size.width = max(size.width, mascot.frame.width)
+            size.height += mascot.frame.height + 2
+            mascot.setFrameOrigin(NSPoint(x: ((size.width - mascot.frame.width) / 2).rounded(), y: pillSize.height + 2))
+        }
+        pill.frame = NSRect(x: ((size.width - pillSize.width) / 2).rounded(), y: 0, width: pillSize.width, height: pillSize.height)
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? .zero

@@ -25,6 +25,12 @@ enum Prefs {
         set { defaults.set(newValue, forKey: "escCancels") }
     }
 
+    /// The character above the pill while dictating (`Mascot` raw value).
+    static var mascot: String {
+        get { defaults.string(forKey: "mascot") ?? Mascot.none.rawValue }
+        set { defaults.set(newValue, forKey: "mascot") }
+    }
+
     /// The local model leaves memory after this many minutes without dictation; 0 = never.
     static var unloadAfterMinutes: Int {
         get { defaults.integer(forKey: "unloadAfterMinutes") }

@@ -57,6 +57,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let side = CommandLine.arguments.dropFirst(index + 1).first
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { statusItem.openPanel(side: side) }
         }
+        if CommandLine.arguments.contains("--indicator-demo") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Indicator.shared.demo() }
+        }
         if CommandLine.arguments.contains("--voices") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { VoicePanel.shared.show() }
         }

@@ -40,6 +40,13 @@ Local git only. Started 2026-10-26.
 - **Indicator** (`Indicator`): TypeWhisper's "Overlay" + "Classic": dark pill at the bottom centre
   of the screen with the pointer: red dot, timer, 5 level bars; "Распознаю…"; short messages
   (no model, no key, nothing recognised). AppKit-drawn `NSPanel`, built on show, released on hide.
+  **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
+  `--indicator-demo`): a monkey, one of two cats or Bruce Almighty (added 2026-10-26, all 48 frames) above the pill while recording/transcribing,
+  typing while the level is above 0.3 (and 0.4 s after), frozen otherwise. Cut out of the owner's
+  GIFs with Vision by `scripts/make-mascots.swift` (largest subject only, frames where the laptop
+  got lifted too are dropped; monkey: frames 106–151,0–43, every 2nd, without the facepalm) into
+  `Diktant/Mascots/*.apng` (not .png: Xcode would recompress and lose the animation). One frame
+  decoded at a time: ~+3 MB while shown.
 - **History** (`History`, SQLite `~/Library/Application Support/Diktant/history.sqlite`): text
   only (no audio), forever: date, text, words, duration, app, model. Paged from disk, Cyrillic
   case-insensitive search (`lower_ru`), copy, delete.
@@ -50,9 +57,10 @@ Local git only. Started 2026-10-26.
   launch at login, app language), Модель, История, Статистика. Built on open, released on close.
 - **Menu bar icon** (`StatusItemController`, `MenuPanel`; changed 2026-10-26): mic; red mic.fill
   while recording. Left click opens a small panel under the icon (`MenuPanel`, like a menu: Esc, a
-  click elsewhere or the icon again closes it): "Голосовые из Telegram" and "История" rows, then
-  the last 3 dictations (click = copy). It opens with the voices column beside it, so the latest
-  voice messages start transcribing at once; hovering "История" swaps it for the history column
+  click elsewhere or the icon again closes it): "Голосовые из Telegram" and "История" rows only
+  (the last 3 dictations under them were dropped 2026-10-26: the history column starts with them). It opens with the voices column beside it, so the latest
+  voice messages start transcribing at once; hovering "История" for 0.3 s (like a submenu, so
+  passing over it on the way to the voices column does nothing; the voices keep transcribing) swaps it for the history column
   (search as you type, 30 newest matches, click = copy, "Вся история…"). Right click: Настройки…,
   История…, Завершить Diktant. `--menu [voices|history]` opens the panel at launch.
 - **Telegram voice messages** (`TelegramVoices`, `VoiceTranscripts`, `VoicePanel`; asked
@@ -63,9 +71,11 @@ Local git only. Started 2026-10-26.
   `AVAudioFile`; Telegram downloads into `<name>_partial` and, once complete, `<name>` is a hard link
   to it with both kept, so a `<name>` next to a different `_partial` file is still downloading).
   More, 3 at a time: scrolling down past the end, ↓ at the end, or the "Ещё 3" button (the folder
-  listing, ~3 s on a 2 GB cache, is read once per opening and paged). Transcribed on opening, newest
-  first, with the current engine; texts of the last few files kept in memory so reopening is
-  instant; nothing goes into the dictation history or statistics (the owner wants only Diktant's
+  listing, plain `lstat` over ~10 000 files in ~0.2 s — FileManager resource values took 3 s — is
+  read once per opening and paged). Transcribed on opening, newest
+  first, with the current engine; texts of the last 200 files kept in
+  `~/Library/Application Support/Diktant/voice-texts.json` (by path and date), so reopening, also
+  after a restart, transcribes nothing again (asked 2026-10-26); nothing goes into the dictation history or statistics (the owner wants only Diktant's
   own dictation there). The chat a file came from is only in Telegram's encrypted database, so the
   owner keeps voice auto-download on for private chats only (Telegram → Data and Storage). Video
   circles (mp4) are not included. `-voicesRoot <folder>` points it at a test folder; `--voices`

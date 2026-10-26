@@ -37,26 +37,32 @@ enum TelegramVoices {
         voices(in: candidates(in: root), from: 0, limit: limit).files
     }
 
-    /// Complete files that may be voice messages, newest first. Reads the folder listing only
-    /// (~10 000 entries: a second or more), so the popup does it once and pages through the result.
+    /// Complete files that may be voice messages, newest first. Reads the folder listing with
+    /// plain `lstat` (~10 000 entries in ~50 ms; FileManager's resource values took 3 s), so the
+    /// popup does it once per opening and pages through the result.
     static func candidates(in root: URL = root) -> [Candidate] {
-        let manager = FileManager.default
-        let accounts = ((try? manager.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0.hasPrefix("account-") }
+        let accounts = ((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []).filter { $0.hasPrefix("account-") }
         var candidates: [Candidate] = []
         for account in accounts {
             let media = root.appendingPathComponent(account).appendingPathComponent("postbox/media", isDirectory: true)
-            guard let files = try? manager.contentsOfDirectory(at: media, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]) else { continue }
-            let names = Set(files.map(\.lastPathComponent))
-            for file in files {
-                let name = file.lastPathComponent
+            var entries: [String: stat] = [:]
+            guard let dir = opendir(media.path) else { continue }
+            let fd = dirfd(dir)
+            while let entry = readdir(dir) {
+                let name = withUnsafeBytes(of: entry.pointee.d_name) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+                guard name != ".", name != ".." else { continue }
+                var info = stat()
+                if fstatat(fd, name, &info, AT_SYMLINK_NOFOLLOW) == 0 { entries[name] = info }
+            }
+            closedir(dir)
+            for (name, info) in entries {
                 // Telegram downloads into "<name>_partial"; once complete, "<name>" is a hard link to
                 // it and both stay. A "<name>" next to a different "_partial" file is not finished.
                 guard !name.hasSuffix("_partial"),
-                      !names.contains(name + "_partial") || isSameFile(file, file.deletingLastPathComponent().appendingPathComponent(name + "_partial")),
-                      let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]),
-                      values.isRegularFile == true, let size = values.fileSize, size > 0, size < maxSize,
-                      let date = values.contentModificationDate else { continue }
-                candidates.append(Candidate(url: file, date: date))
+                      (info.st_mode & S_IFMT) == S_IFREG, info.st_size > 0, info.st_size < maxSize else { continue }
+                if let partial = entries[name + "_partial"], partial.st_ino != info.st_ino { continue }
+                let date = Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec) + TimeInterval(info.st_mtimespec.tv_nsec) / 1e9)
+                candidates.append(Candidate(url: media.appendingPathComponent(name), date: date))
             }
         }
         return candidates.sorted { $0.date > $1.date }
@@ -77,13 +83,6 @@ enum TelegramVoices {
         return (result, index)
     }
 
-    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
-        let manager = FileManager.default
-        guard let first = (try? manager.attributesOfItem(atPath: a.path))?[.systemFileNumber] as? Int,
-              let second = (try? manager.attributesOfItem(atPath: b.path))?[.systemFileNumber] as? Int else { return false }
-        return first == second
-    }
-
     /// "OggS" page with an "OpusHead" header: a voice message (stickers and videos are other formats).
     static func isOggOpus(_ url: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
@@ -94,9 +93,9 @@ enum TelegramVoices {
 }
 
 /// The popup's model: the latest voice messages and their text, transcribed newest first when the
-/// popup opens; older ones a page at a time on request. Texts are kept for the last few files only
-/// (by path and date), so opening it again is instant; nothing goes into the dictation history or
-/// statistics.
+/// popup opens; older ones a page at a time on request. Texts of the last 200 files (by path and
+/// date) are kept in `voice-texts.json` next to the history, so opening it again, also after a
+/// restart, does not transcribe them again; nothing goes into the dictation history or statistics.
 @MainActor
 final class VoiceTranscripts: ObservableObject {
     static let shared = VoiceTranscripts()
@@ -119,7 +118,8 @@ final class VoiceTranscripts: ObservableObject {
     /// How many more each "more" (scroll past the end, ↓, the button) adds.
     nonisolated static let pageSize = 3
 
-    private var cache: [String: String] = [:]
+    /// Loaded on the first opening, so it costs nothing until the popup is used.
+    private lazy var cache: [CachedText] = Self.loadCache()
     private var candidates: [TelegramVoices.Candidate] = []
     private var next = 0
     private var loader: Task<Void, Never>?
@@ -140,6 +140,11 @@ final class VoiceTranscripts: ObservableObject {
         }
     }
 
+    /// The menu panel's voices column shown again: keep what is there (still transcribing, maybe).
+    func refreshIfEmpty() {
+        if items.isEmpty, !isLoading { refresh() }
+    }
+
     /// The next few older voice messages, transcribed after the ones already shown.
     func loadMore() {
         guard hasMore, !isLoading else { return }
@@ -156,7 +161,10 @@ final class VoiceTranscripts: ObservableObject {
         isLoading = false
         next = page.next
         hasMore = page.next < candidates.count
-        items += page.files.map { file in Item(file: file, text: cache[Self.key(file)].map(Text.done) ?? .waiting) }
+        items += page.files.map { file in
+            let key = Self.key(file)
+            return Item(file: file, text: cache.last { $0.key == key }.map { .done($0.text) } ?? .waiting)
+        }
         if items.isEmpty {
             problem = FileManager.default.fileExists(atPath: TelegramVoices.root.path)
                 ? String(localized: "Голосовых в кеше Telegram нет. Откройте сообщение и нажмите воспроизведение — оно скачается за секунду.")
@@ -212,8 +220,29 @@ final class VoiceTranscripts: ObservableObject {
         isLoading = false
     }
 
+    private struct CachedText: Codable {
+        let key: String
+        let text: String
+    }
+
+    private static let cacheLimit = 200
+    private static var cacheURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Diktant/voice-texts.json")
+    }
+
+    private static func loadCache() -> [CachedText] {
+        guard let data = try? Data(contentsOf: cacheURL) else { return [] }
+        return (try? JSONDecoder().decode([CachedText].self, from: data)) ?? []
+    }
+
     private func remember(_ text: String, for file: VoiceFile) {
-        cache[Self.key(file)] = text
-        if cache.count > 30 { cache.removeAll() } // tiny; just keep it bounded
+        let key = Self.key(file)
+        cache.removeAll { $0.key == key }
+        cache.append(CachedText(key: key, text: text))
+        if cache.count > Self.cacheLimit { cache.removeFirst(cache.count - Self.cacheLimit) }
+        let url = Self.cacheURL
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(cache).write(to: url, options: .atomic)
     }
 }

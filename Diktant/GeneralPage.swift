@@ -4,6 +4,7 @@ import SwiftUI
 struct GeneralPage: View {
     @AppStorage("sounds") private var sounds = true
     @AppStorage("escCancels") private var escCancels = true
+    @AppStorage("mascot") private var mascot = Mascot.none.rawValue
     @State private var accessibility = Paster.isTrusted
     @State private var microphone = AudioRecorder.permission
 
@@ -22,6 +23,22 @@ struct GeneralPage: View {
                         Text("Esc отменяет запись")
                         Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
                     }
+                }
+                LabeledContent {
+                    HStack(spacing: 6) {
+                        Menu {
+                            ForEach(Mascot.allCases) { item in
+                                Button(item.title) { mascot = item.rawValue }
+                            }
+                        } label: {
+                            Text((Mascot(rawValue: mascot) ?? .none).title)
+                        }
+                        .fixedSize()
+                        Button("Показать") { Indicator.shared.demo() }
+                    }
+                } label: {
+                    Text("Анимация")
+                    Text("Персонаж над индикатором печатает, пока вы говорите").font(.caption).foregroundStyle(.secondary)
                 }
             }
             Section {

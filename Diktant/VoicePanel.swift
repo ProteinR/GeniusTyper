@@ -115,7 +115,6 @@ struct VoicesView: View {
     let close: () -> Void
     let resized: () -> Void
     @ObservedObject private var model = VoiceTranscripts.shared
-    @State private var expanded: String?
     @State private var listHeight: CGFloat = 0
     @State private var more = MoreTrigger()
 
@@ -160,10 +159,8 @@ struct VoicesView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
                         if index > 0 { Divider() }
-                        VoiceRow(item: item, expanded: index == 0 || expanded == item.id) {
-                            expanded = expanded == item.id ? nil : item.id
-                        }
-                        .id(item.id)
+                        VoiceRow(item: item)
+                            .id(item.id)
                     }
                     if model.hasMore || model.isLoading {
                         Button { model.loadMore() } label: {
@@ -231,10 +228,10 @@ private final class MoreTrigger {
     }
 }
 
+/// One voice message with its whole text (folding to two lines and unfolding on click left the
+/// unfolded text drawn over the rows below).
 private struct VoiceRow: View {
     let item: VoiceTranscripts.Item
-    let expanded: Bool
-    let toggle: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -257,12 +254,9 @@ private struct VoiceRow: View {
                 }
             case .done(let text):
                 Text(text.isEmpty ? String(localized: "Речь не распознана") : text)
-                    .lineLimit(expanded ? nil : 2)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: toggle)
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
             }

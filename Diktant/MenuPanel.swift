@@ -4,7 +4,8 @@ import SwiftUI
 
 /// What the menu bar icon's left click opens: a small panel under the icon with a second column
 /// beside it: the latest Telegram voice messages, transcribed as it opens, or (hovering "История")
-/// the history with search. Below the two items, the last few dictations, copied on click. Built on show and
+/// the history with search (the latest dictations are at its top, so they are not repeated under
+/// the two items). Built on show and
 /// released on close; Esc, a click elsewhere or the icon again closes it. Does not take the focus
 /// from the app in front, but becomes key so the search field can be typed in.
 @MainActor
@@ -124,7 +125,6 @@ private struct MenuView: View {
     let close: () -> Void
     let resized: () -> Void
     @State private var side: Side?
-    @State private var recent: [HistoryEntry] = History.shared.page(offset: 0, limit: 3)
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -143,7 +143,8 @@ private struct MenuView: View {
         .fixedSize()
         .onAppear { side = initialSide }
         .onChange(of: side) { old, new in
-            if new == .voices { VoiceTranscripts.shared.refresh() } else if old == .voices { VoiceTranscripts.shared.clear() }
+            // The voices keep transcribing while the history is shown; the panel's close clears them.
+            if new == .voices { VoiceTranscripts.shared.refreshIfEmpty() }
             DispatchQueue.main.async(execute: resized)
         }
     }
@@ -157,43 +158,31 @@ private struct MenuView: View {
             MenuRow(icon: "clock.arrow.circlepath", title: "История", opens: true, selected: side == .history) {
                 side = .history
             } hover: { side = .history }
-            if !recent.isEmpty {
-                Divider().padding(.vertical, 4)
-                Text("Последние · нажмите, чтобы скопировать")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 2)
-                ForEach(recent) { entry in
-                    MenuRow(icon: "doc.on.doc", title: entry.text, lines: 2) {
-                        copy(entry.text)
-                        close()
-                    } hover: {}
-                }
-            }
         }
         .padding(6)
         .frame(width: 280)
     }
 }
 
-/// One row of the menu: highlighted under the pointer like a menu item.
+/// One row of the menu: highlighted under the pointer like a menu item. Like a submenu, hovering
+/// switches the side column only when the pointer stays on the row (passing over "История" on the
+/// way to the voices column does not open the history).
 private struct MenuRow: View {
     let icon: String
     let title: String
     var detail: String?
-    var lines = 1
     var opens = false
     var selected = false
     let action: () -> Void
     let hover: () -> Void
     @State private var hovered = false
+    @State private var hoverWork: DispatchWorkItem?
 
     var body: some View {
         Button(action: action) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: icon).frame(width: 16)
-                Text(title).lineLimit(lines).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
+                Text(title).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
                 if let detail { Text(detail).foregroundStyle(.secondary) }
                 if opens { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
             }
@@ -205,7 +194,12 @@ private struct MenuRow: View {
         .buttonStyle(.plain)
         .onHover { inside in
             hovered = inside
-            if inside { hover() }
+            hoverWork?.cancel()
+            hoverWork = nil
+            guard inside else { return }
+            let work = DispatchWorkItem(block: hover)
+            hoverWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
         }
     }
 }
