@@ -173,6 +173,11 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   read as "not hearing"; both seen on recorded dictations) (asked 2026-10-26: 3 pt dots, dim bars and bars
   filling in one by one all read as "wait, loading"); "Распознаю…"; short messages
   (no model, no key, nothing recognised). AppKit-drawn `NSPanel`, built on show, released on hide.
+  **Soft ends and glow** (asked 2026-10-27): the level row fades out at both ends through a
+  gradient mask on the view's layer (16 pt on the left, 10 pt on the right, where the newest sound
+  comes in), and the layer holding the bars or the line has a faint white shadow (radius 3,
+  opacity 0.35); the mask is taller than the view so the glow is not cut. No CPU cost measured
+  (line 2.7 % against 2.8 %, WindowServer within noise).
   **Adaptive scale** (`LevelScale`, asked 2026-10-27: with AirPods nearly every word filled the
   bar): the bars show a 15 dB window hanging 2 dB below the loud speech of the last seconds (peak:
   up at once, down 0.4 dB/s while speaking, frozen in pauses), cut at the background (down at once,

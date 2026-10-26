@@ -280,7 +280,9 @@ private final class PillView: NSView {
 /// 28 thin ones, a 75-point line, each moving as fast as before (points a second), so the longer
 /// row only shows more of the past.
 /// Every style is Core Animation layers: a bar is a `CALayer` whose frame changes, the line a
-/// `CAShapeLayer` whose path changes; the view itself never draws.
+/// `CAShapeLayer` whose path changes; the view itself never draws. Both ends fade out through a
+/// gradient mask, so what moves comes in and leaves softly, and it all has a faint glow (a white
+/// shadow on the layer holding it; asked 2026-10-27).
 private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
@@ -301,12 +303,29 @@ private final class BarsView: NSView {
     private var lineLayer: CAShapeLayer?
     private var barLayers: [CALayer] = []
     private var flatLayer: CALayer?
+    /// Holds the bars or the line and glows; the view's own layer fades its ends (`fade`).
+    private let content = CALayer()
+    private let fade = CAGradientLayer()
 
     private static let color = NSColor(white: 0.95, alpha: 1).cgColor
+    /// How far each end fades out: the newest sound comes in on the right, so that end fades less.
+    static let fadeLeft: CGFloat = 16
+    static let fadeRight: CGFloat = 10
+    static let glowRadius: CGFloat = 3
+    static let glowOpacity: Float = 0.35
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        content.shadowColor = NSColor.white.cgColor
+        content.shadowOpacity = Self.glowOpacity
+        content.shadowRadius = Self.glowRadius
+        content.shadowOffset = .zero
+        layer?.addSublayer(content)
+        fade.startPoint = CGPoint(x: 0, y: 0.5)
+        fade.endPoint = CGPoint(x: 1, y: 0.5)
+        fade.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+        layer?.mask = fade
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -327,6 +346,13 @@ private final class BarsView: NSView {
         barLayers = []
         flatLayer?.removeFromSuperlayer()
         flatLayer = nil
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        content.frame = bounds
+        // Taller than the view, so the glow above and below the highest bars is not cut off.
+        fade.frame = bounds.insetBy(dx: 0, dy: -2 * Self.glowRadius)
+        fade.locations = [0, NSNumber(value: Double(Self.fadeLeft / bounds.width)), NSNumber(value: Double(1 - Self.fadeRight / bounds.width)), 1]
+        CATransaction.commit()
         switch style {
         case .bars, .wave:
             CATransaction.begin()
@@ -336,7 +362,7 @@ private final class BarsView: NSView {
                 let bar = CALayer()
                 bar.backgroundColor = Self.color
                 bar.cornerRadius = radius
-                layer?.addSublayer(bar)
+                content.addSublayer(bar)
                 return bar
             }
             if style == .bars {
@@ -344,7 +370,7 @@ private final class BarsView: NSView {
                 flat.backgroundColor = Self.color
                 flat.cornerRadius = Self.lineHeight / 2
                 flat.frame = CGRect(x: 0, y: bounds.height / 2 - Self.lineHeight / 2, width: bounds.width - 2, height: Self.lineHeight)
-                layer?.addSublayer(flat)
+                content.addSublayer(flat)
                 flatLayer = flat
             }
             CATransaction.commit()
@@ -357,7 +383,7 @@ private final class BarsView: NSView {
             layer.lineWidth = 2
             layer.lineCap = .round
             layer.lineJoin = .round
-            self.layer?.addSublayer(layer)
+            content.addSublayer(layer)
             lineLayer = layer
             updateLine()
         }

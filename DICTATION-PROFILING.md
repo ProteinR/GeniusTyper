@@ -169,3 +169,8 @@ bars, 28 thin ones, a 75-point line); the pill no longer redraws twice a second 
 
 The helper leaves after `unloadAfterMinutes` (5) without dictation, so idle is ~22–31 MB in all.
 The pill test feeds levels without the microphone: a real dictation adds `AVAudioEngine`'s capture.
+
+**Soft ends and a faint glow (2026-10-27).** A gradient mask fades both ends of the level row and
+a white shadow (radius 3) makes it glow. `--indicator-test`, two rounds: Полоски 2.6 %, Плотная
+волна 2.7–2.8 %, Линия 2.7 % (2.8 % before), footprint 23.0–23.9 MB; WindowServer 43–44 % against a
+45.8 % baseline, so within noise: the mask and the blur of a 100 × 30 pt layer cost nothing visible.
