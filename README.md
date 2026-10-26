@@ -2,8 +2,16 @@
 
 **English** | [Русский](README.ru.md)
 
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-000?logo=apple)](#requirements)
+[![Apple Silicon native](https://img.shields.io/badge/Apple%20Silicon-native%20%C2%B7%20Neural%20Engine-0a84ff)](#built-for-apple-silicon)
+[![Swift](https://img.shields.io/badge/Swift-native-F05138?logo=swift&logoColor=white)](#built-for-apple-silicon)
+[![Idle memory 23 MB](https://img.shields.io/badge/idle-23%20MB%20%C2%B7%200%20wake--ups-2ea44f)](#built-for-apple-silicon)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 **Genius Typer** is a free, open-source macOS menu bar app for everything about typing for people
-who write in **Russian and English**:
+who write in **Russian and English**. A Punto Switcher / Caramba Switcher alternative, a Maccy-style
+clipboard manager and offline voice typing (speech-to-text) in one native app, tuned for Apple
+Silicon (M1, M2, M3, M4, M5):
 
 - **Wrong layout fixed automatically**: "ghbdtn" becomes "привет" after the space, "руддщ" becomes
   "hello". **Caps Lock switches the layout** instantly, like on Windows / Linux setups.
@@ -17,6 +25,23 @@ who write in **Russian and English**:
 It replaces three apps — **Caramba Switcher** (or Punto Switcher), **Maccy** and **TypeWhisper**
 (or superwhisper, MacWhisper dictation) — with one icon, one login item and ~23 MB of memory.
 Each part has its own switch; turn off what you do not need.
+
+## Why Genius Typer
+
+- **Three apps in one, lighter than any of them**: 23 MB of memory at rest for layout switching,
+  clipboard history and dictation together; Maccy alone took 353–505 MB on the same Mac.
+- **Zero background cost**: 0 CPU wake-ups per second at rest (Maccy: ~100/s), so it does not
+  touch your battery life.
+- **Offline speech recognition on the Neural Engine**: 10 seconds of speech becomes text in
+  0.08 s, about 100× faster than real time. No subscription, no account, no audio sent anywhere.
+- **The model is not kept in memory**: it lives in a helper process that exits after a few idle
+  minutes, so dictation costs nothing while you are not talking.
+- **Native Swift + AppKit**, a universal binary (arm64 + x86_64): no Electron, no Python, no web
+  view. The main binary is 6.6 MB; the speech engine is a separate helper.
+- **Private by design**: macOS's own spell checker decides what is a word, the typing journal holds
+  no text, password managers and secure input are never seen.
+- **Free and open source** (MIT), every number below reproducible with the scripts in the
+  repository.
 
 The interface is in **Russian** (the app is for Russian speakers). The strings go through a String
 Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be added.
@@ -60,19 +85,47 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 - **Telegram voice messages**: the newest voice messages from the official Telegram app's cache,
   transcribed locally and kept for a few days.
 
-## Lightweight by design
+## Built for Apple Silicon
 
-Measured on Apple Silicon, macOS 26, with `scripts/profile.py`; memory is the footprint Activity
-Monitor shows. Details: [DICTATION-PROFILING.md](DICTATION-PROFILING.md),
-[MACCY-BASELINE.md](MACCY-BASELINE.md) (Russian).
+Measured on an M-series Mac, macOS 26, with `scripts/profile.py`, `top`, `heap`, `leaks` and the
+app's own `--…-test` modes; memory is the footprint Activity Monitor shows. Details:
+[DICTATION-PROFILING.md](DICTATION-PROFILING.md), [MACCY-BASELINE.md](MACCY-BASELINE.md) (Russian).
 
 | | Genius Typer | Replaced apps |
 |---|---|---|
 | Idle: memory | **23 MB** (all three parts) | Maccy 353–505 MB, TypeWhisper ~113 MB + 30 MB widget |
 | Idle: CPU, wake-ups | **0.03%, 0/s** | Maccy 0.03%, ~100/s |
+| Copying text once a second | **0.95% CPU** | Maccy 17.3% |
+| Copying an 800×600 image every 2 s | **1.5% CPU, 37 MB** | Maccy 12.6%, 546 MB |
+| Clipboard history on disk | ~2 MB for 70 entries | Maccy 568 MB for 50 |
 | Dictating | ~17 MB + model helper ~36 MB, gone after idle | TypeWhisper keeps the model loaded |
+| Leaks after 3 stress rounds | none of ours (`leaks`), footprint flat | — |
 
-Nothing polls except the clipboard (`changeCount` twice a second, as every clipboard manager does).
+**Local dictation** (NVIDIA Parakeet TDT 0.6B v3, CoreML on the Neural Engine):
+
+| | Time |
+|---|---|
+| Model load (warm) | 0.17–0.27 s, while you are already speaking |
+| 7 s of speech | 0.07 s |
+| 10 s of speech | 0.08 s (0.35 s including the helper start) |
+| 20.7 s of speech | 0.28 s |
+| 9 s Telegram voice message | 0.46 s, model start included |
+
+**How it stays this light:**
+
+- The speech model runs on the **Neural Engine** through CoreML, not on the CPU or GPU, and in a
+  separate process: freed CoreML memory cannot be returned by a running process, so the helper
+  simply exits (54 MB → 15–17 MB after a dictation).
+- Nothing polls except the clipboard (`changeCount` twice a second, as every clipboard manager
+  does). Timers exist only while the dictation pill is on screen.
+- The recording pill is drawn by **Core Animation** layers: the 60 fps waveform builds one 40-point
+  path a frame (3.3% CPU, was 9.5% drawn by the view); WindowServer stays within ~1.5% of its
+  baseline.
+- Animation frames are raw pixels compressed with Apple's **LZFSE**, memory-mapped and decoded one
+  at a time: 0.15 ms a frame against ~1 ms for PNG.
+- The ё dictionary (~107 000 words) is memory-mapped and binary-searched: no heap.
+- Windows are built when opened and released when closed; no SwiftUI `Charts`/`Canvas` or system
+  `Toggle`, which alone took ~100 MB of graphics memory.
 
 ## Privacy
 
@@ -139,7 +192,28 @@ All settings are user defaults; [SETTINGS.md](SETTINGS.md) lists the keys and va
 ./scripts/test.sh
 ```
 
+## Alternatives it replaces
+
+Looking for a **Punto Switcher for Mac**, a **Caramba Switcher** alternative, an automatic keyboard
+layout switcher for macOS, a free **Maccy** alternative, or an offline **superwhisper / MacWhisper /
+Wispr Flow / TypeWhisper** alternative for voice typing? Genius Typer does all of it in one menu bar
+app, for free, without sending your text or voice anywhere.
+
+| You need | Usually | Genius Typer |
+|---|---|---|
+| Fix text typed in the wrong layout (RU ↔ EN) | Punto Switcher, Caramba Switcher | Auto-fix + Caps Lock |
+| Switch layout with Caps Lock | System setting, Karabiner-Elements | Built in, instant, with undo |
+| Clipboard history | Maccy, Paste, Raycast | ⇧⌘C, searchable in either layout |
+| Voice typing / dictation | superwhisper, MacWhisper, Wispr Flow, TypeWhisper | Local Parakeet on the Neural Engine, or Groq/OpenAI |
+| Transcribe Telegram voice messages | Telegram Premium, bots | Local, from Telegram's cache |
+
 ## FAQ
+
+**Does it run on Intel Macs?** Yes, it is a universal binary; local dictation needs the Neural
+Engine of Apple Silicon to be fast, so on Intel use a cloud engine.
+
+**Is it free? Does it need an internet connection?** Free and MIT-licensed. Only the first download
+of the speech model (~470 MB) needs the internet; after that everything works offline.
 
 **Does it work with other languages?** Layout fixing is built for one English and one Russian
 layout. Dictation understands 25 European languages.
