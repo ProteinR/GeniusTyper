@@ -48,15 +48,22 @@ Local git only. Started 2026-10-26.
   totals computed by SQLite.
 - **Settings window** (`SettingsWindow`): Основное (key, sounds, Esc, permissions when missing,
   launch at login, app language), Модель, История, Статистика. Built on open, released on close.
-- **Menu bar icon** (`StatusItemController`): mic; red mic.fill while recording; left click opens
-  settings, right click: Расшифровать голосовое из Telegram, Настройки…, История…, Завершить Diktant.
+- **Menu bar icon** (`StatusItemController`, `MenuPanel`; changed 2026-10-26): mic; red mic.fill
+  while recording. Left click opens a small panel under the icon (`MenuPanel`, like a menu: Esc, a
+  click elsewhere or the icon again closes it): "Голосовые из Telegram" and "История" rows, then
+  the last 3 dictations (click = copy). It opens with the voices column beside it, so the latest
+  voice messages start transcribing at once; hovering "История" swaps it for the history column
+  (search as you type, 30 newest matches, click = copy, "Вся история…"). Right click: Настройки…,
+  История…, Завершить Diktant. `--menu [voices|history]` opens the panel at launch.
 - **Telegram voice messages** (`TelegramVoices`, `VoiceTranscripts`, `VoicePanel`; asked
   2026-10-26): ⌃⌥V (changeable in Основное; a Carbon hot key with id 2, same handler as the
-  dictation combination) or the first right-click menu item "Расшифровать голосовое из Telegram" opens a popup with the 3 newest
-  voice messages from the official Telegram app's cache
+  dictation combination) opens a popup with the 3 newest voice messages (the left-click panel shows the same list) from the official Telegram app's cache
   (`~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable/account-*/postbox/media`,
   files without extension; voice = Ogg Opus, checked by the "OggS"/"OpusHead" header, decoded by
-  `AVAudioFile`; `<name>_partial` = still downloading, skipped). Transcribed on opening, newest
+  `AVAudioFile`; Telegram downloads into `<name>_partial` and, once complete, `<name>` is a hard link
+  to it with both kept, so a `<name>` next to a different `_partial` file is still downloading).
+  More, 3 at a time: scrolling down past the end, ↓ at the end, or the "Ещё 3" button (the folder
+  listing, ~3 s on a 2 GB cache, is read once per opening and paged). Transcribed on opening, newest
   first, with the current engine; texts of the last few files kept in memory so reopening is
   instant; nothing goes into the dictation history or statistics (the owner wants only Diktant's
   own dictation there). The chat a file came from is only in Telegram's encrypted database, so the

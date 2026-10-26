@@ -2,9 +2,9 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// What the menu bar icon's left click opens: a small panel under the icon. Hovering "Голосовые из
-/// Telegram" or "История" opens a second column beside it (the voice messages transcribed, or the
-/// history with search); below them the last few dictations, copied on click. Built on show and
+/// What the menu bar icon's left click opens: a small panel under the icon with a second column
+/// beside it: the latest Telegram voice messages, transcribed as it opens, or (hovering "История")
+/// the history with search. Below the two items, the last few dictations, copied on click. Built on show and
 /// released on close; Esc, a click elsewhere or the icon again closes it. Does not take the focus
 /// from the app in front, but becomes key so the search field can be typed in.
 @MainActor
@@ -25,7 +25,8 @@ final class MenuPanel {
 
     func show(under button: NSStatusBarButton, side: String? = nil) {
         self.button = button
-        if panel == nil { build(side: side.flatMap(Side.init(rawValue:))) }
+        // Opens on the voices: the latest ones start transcribing at once.
+        if panel == nil { build(side: side.flatMap(Side.init(rawValue:)) ?? .voices) }
         fit(initial: true)
         panel?.makeKeyAndOrderFront(nil)
         button.highlight(true)
@@ -167,7 +168,7 @@ private struct MenuView: View {
                     MenuRow(icon: "doc.on.doc", title: entry.text, lines: 2) {
                         copy(entry.text)
                         close()
-                    } hover: { side = nil }
+                    } hover: {}
                 }
             }
         }
