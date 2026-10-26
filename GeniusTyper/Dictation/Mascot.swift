@@ -1,10 +1,12 @@
 import AppKit
-import ImageIO
+import Compression
 
 /// An animated character above the dictation pill (Настройки → Основное → Анимация): it types
 /// while you speak and stops when you pause. The animations are cut out of GIFs by
-/// `scripts/make-mascots.swift` into animated PNGs (`Mascots/*.apng`; not .png, so Xcode does not
-/// recompress them and drop the animation).
+/// `scripts/make-mascots.swift` into animated PNGs (`scripts/mascots/*.apng`), which
+/// `scripts/make-mascot-frames.swift` turns into `Mascots/*.frames`: the size they are shown at,
+/// the shadow baked in, raw frames compressed with LZFSE (a PNG frame took ~1 ms to decode, this
+/// ~0.15 ms).
 enum Mascot: String, CaseIterable, Identifiable {
     case none, monkey, greyCat, wigCat, bruce
 
@@ -36,14 +38,16 @@ enum Mascot: String, CaseIterable, Identifiable {
     static var current: Mascot { Mascot(rawValue: Prefs.mascot) ?? .none }
 }
 
-/// Shows one frame of the animation at a time: the frame is decoded when it is shown and the one
-/// before is dropped, so a 44-frame animation costs one frame of memory. The frame timer runs only
-/// while it moves: full speed while the voice is heard, then (a pause between words, or the end)
-/// it slows down smoothly over `slowDownOver` and stops, so short pauses look like a breath rather
-/// than a stutter. With two loops it starts slow and speeds up after `speedUpAfter` of speech; a
-/// stop longer than `calmDownAfter` starts slow again.
+/// Shows one frame of the animation at a time: the file is memory-mapped (clean pages, not the
+/// app's footprint), the frame is decompressed when it is shown and the one before is dropped, so
+/// an animation costs one frame of memory (~0.3 MB). The frame timer runs only while it moves:
+/// full speed while the voice is heard, then (a pause between words, or the end) it slows down
+/// smoothly over `slowDownOver` and stops, so short pauses look like a breath rather than a
+/// stutter. With two loops it starts slow and speeds up after `speedUpAfter` of speech; a stop
+/// longer than `calmDownAfter` starts slow again.
 final class MascotView: NSView {
-    static let height: CGFloat = 96
+    /// Room around the figure in the frames for the baked shadow, which may overlap the pill.
+    static let shadowPad: CGFloat = 4
     private static let speedUpAfter: TimeInterval = 3
     private static let calmDownAfter: TimeInterval = 1.5
     private static let fullSpeedFor: TimeInterval = 0.2
@@ -51,9 +55,13 @@ final class MascotView: NSView {
     /// Slower than this, it stops.
     private static let minSpeed = 0.15
 
+    /// One `.frames` file (format in `scripts/make-mascot-frames.swift`).
     private struct Loop {
-        let source: CGImageSource
+        let data: Data
+        let width: Int
+        let height: Int
         let delays: [TimeInterval]
+        let ranges: [Range<Int>]
     }
 
     private let loops: [Loop]
@@ -69,35 +77,35 @@ final class MascotView: NSView {
     init?(_ mascot: Mascot) {
         guard let scene = mascot.scenes.randomElement() else { return nil }
         let loops = scene.compactMap(Self.load)
-        guard loops.count == scene.count,
-              let props = CGImageSourceCopyPropertiesAtIndex(loops[0].source, 0, nil) as? [CFString: Any],
-              let width = props[kCGImagePropertyPixelWidth] as? CGFloat,
-              let height = props[kCGImagePropertyPixelHeight] as? CGFloat
-        else { return nil }
+        guard loops.count == scene.count, let first = loops.first else { return nil }
         self.loops = loops
-        super.init(frame: NSRect(x: 0, y: 0, width: (width * Self.height / height).rounded(), height: Self.height))
+        // Made for 2× screens: a pixel is half a point.
+        super.init(frame: NSRect(x: 0, y: 0, width: CGFloat(first.width) / 2, height: CGFloat(first.height) / 2))
         wantsLayer = true
         layer?.contentsGravity = .resizeAspect
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.35
-        layer?.shadowRadius = 3
-        layer?.shadowOffset = CGSize(width: 0, height: -1)
         showFrame()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     private static func load(_ name: String) -> Loop? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "apng"),
-              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              CGImageSourceGetCount(source) > 0 else { return nil }
-        let delays = (0..<CGImageSourceGetCount(source)).map { i in
-            let props = CGImageSourceCopyPropertiesAtIndex(source, i, nil) as? [CFString: Any]
-            let png = props?[kCGImagePropertyPNGDictionary] as? [CFString: Any]
-            let delay = (png?[kCGImagePropertyAPNGUnclampedDelayTime] ?? png?[kCGImagePropertyAPNGDelayTime]) as? Double
-            return max(0.04, delay ?? 0.08)
+        guard let url = Bundle.main.url(forResource: name, withExtension: "frames"),
+              let data = try? Data(contentsOf: url, options: .alwaysMapped),
+              data.count > 16, data.prefix(4) == Data("GTF1".utf8) else { return nil }
+        func uint32(_ at: Int) -> UInt32 {
+            data.withUnsafeBytes { UInt32(littleEndian: $0.loadUnaligned(fromByteOffset: at, as: UInt32.self)) }
         }
-        return Loop(source: source, delays: delays)
+        let width = Int(uint32(4)), height = Int(uint32(8)), count = Int(uint32(12))
+        guard count > 0, data.count >= 16 + count * 12 else { return nil }
+        var delays: [TimeInterval] = [], ranges: [Range<Int>] = []
+        for i in 0..<count {
+            let entry = 16 + i * 12
+            let offset = Int(uint32(entry + 4)), length = Int(uint32(entry + 8))
+            guard offset + length <= data.count else { return nil }
+            delays.append(max(0.04, TimeInterval(Float32(bitPattern: uint32(entry)))))
+            ranges.append(offset..<offset + length)
+        }
+        return Loop(data: data, width: width, height: height, delays: delays, ranges: ranges)
     }
 
     /// The microphone level was checked (~12 times a second): `loud` while speaking.
@@ -156,7 +164,21 @@ final class MascotView: NSView {
     }
 
     private func showFrame() {
-        let options = [kCGImageSourceShouldCache: false] as CFDictionary
-        layer?.contents = CGImageSourceCreateImageAtIndex(loops[loop].source, index, options)
+        let current = loops[loop]
+        let size = current.width * current.height * 4
+        var pixels = Data(count: size)
+        let written = pixels.withUnsafeMutableBytes { out in
+            current.data[current.ranges[index]].withUnsafeBytes { compressed in
+                compression_decode_buffer(out.bindMemory(to: UInt8.self).baseAddress!, size,
+                                          compressed.bindMemory(to: UInt8.self).baseAddress!, compressed.count, nil, COMPRESSION_LZFSE)
+            }
+        }
+        guard written == size, let provider = CGDataProvider(data: pixels as CFData) else { return }
+        layer?.contents = CGImage(width: current.width, height: current.height, bitsPerComponent: 8, bitsPerPixel: 32,
+                                  bytesPerRow: current.width * 4, space: Self.sRGB,
+                                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
+
+    private static let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
 }

@@ -167,8 +167,12 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   like stutter). Cut out of the owner's
   GIFs with Vision by `scripts/make-mascots.swift` (largest subject only, frames where the laptop
   got lifted too are dropped; monkey: frames 106–151,0–43, every 2nd, without the facepalm) into
-  `GeniusTyper/Dictation/Mascots/*.apng` (not .png: Xcode would recompress and lose the animation). One frame
-  decoded at a time: ~+3 MB while shown. Bruce (replaced 2026-10-26 by the owner's green-screen clip
+  `scripts/mascots/*.apng` (the sources, not bundled), which `scripts/make-mascot-frames.swift`
+  turns into `GeniusTyper/Dictation/Mascots/*.frames`: 96 pt high at 2×, the shadow baked in, raw
+  frames compressed with LZFSE (decoding a PNG frame took ~1 ms, this ~0.15 ms; 2026-10-26,
+  `DICTATION-PROFILING.md`). Memory-mapped, one frame decompressed at a time: ~0.3 MB while
+  shown, ~3 % CPU while it moves (the pill alone ~1.2 %). After changing an APNG, run the script
+  for it. Bruce (replaced 2026-10-26 by the owner's green-screen clip
   `m2-res_480p.mp4`, cut with ffmpeg `chromakey=0x12FF08:0.2:0.05,despill`, 15 fps, 240 px high):
   two views, one picked at random per dictation — front (crop 854:467:0:13; slow 1.0–4.0 s, fast
   4.3–6.3 s) and side (crop 690:460:110:20; slow 6.7–8.9 s, fast 11.55–13.9 s). Each starts slow
@@ -227,6 +231,8 @@ Dictation checks: - `scripts/test.sh` also runs these unit tests (hybrid key, sh
   Telegram voice lookup with `Tests/GeniusTyperTests/Fixtures/voice.ogg`, synthesized speech).
 - `--transcribe-file <audio>`: transcribes a file with the current engine twice, logs text, time,
   footprint of the app and the helper (`say -v Milena -o ru.aiff "…"` for Russian speech).
+- `--indicator-test`: the pill with each animation for 12 s (steady speech, then quiet), two rounds;
+  logs the app's CPU and footprint for each.
 - `--dictation-stress-test`: three rounds of every settings page plus load/transcribe/unload of the model,
   footprint after each step; growing every round = a leak.
 - - `PROFILE=1 scripts/install.sh`: signs with get-task-allow for `heap`/`leaks`/`vmmap`.

@@ -85,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if arguments.contains("--stress-test") { runStressTest() }
         if arguments.contains("--dictation-stress-test") { runDictationStressTest() }
+        if arguments.contains("--indicator-test") { runIndicatorTest() }
         // `--open-settings [general|typing|clipboard|dictation|history|statistics]`: for screenshots.
         if let index = arguments.firstIndex(of: "--open-settings") {
             let page = arguments.dropFirst(index + 1).first.flatMap(SettingsPage.init(rawValue:))

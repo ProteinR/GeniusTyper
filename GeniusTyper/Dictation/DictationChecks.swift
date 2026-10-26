@@ -60,6 +60,56 @@ extension AppDelegate {
         }
     }
 
+    /// `--indicator-test`: the dictation pill with each animation in turn, 10 s of steady speech
+    /// (level 0.6, 12 times a second) and 2 s of quiet, logging the CPU time the app used and the
+    /// footprint for each; then one more round of all of them (growing = a leak). WindowServer's
+    /// share is measured from outside (`ps -o time= -p <WindowServer>`), the log has the times.
+    @MainActor
+    func runIndicatorTest() {
+        let saved = Prefs.mascot
+        var queue = Mascot.allCases + Mascot.allCases
+        func cpuSeconds() -> Double {
+            var usage = rusage()
+            getrusage(RUSAGE_SELF, &usage)
+            return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1e6
+        }
+        @MainActor func next() {
+            guard !queue.isEmpty else {
+                Prefs.mascot = saved
+                Log.info("Indicator test done: footprint \(Self.footprintMB()) MB", "test")
+                return
+            }
+            let mascot = queue.removeFirst()
+            Prefs.mascot = mascot.rawValue
+            let cpu = cpuSeconds(), started = Date()
+            Log.info("Indicator test \(mascot.rawValue) start", "test")
+            Indicator.shared.show(.recording(since: started))
+            let timer = Timer(timeInterval: 1.0 / 12, repeats: true) { timer in
+                MainActor.assumeIsolated {
+                    let elapsed = Date().timeIntervalSince(started)
+                    guard elapsed < 12 else {
+                        timer.invalidate()
+                        let used = cpuSeconds() - cpu
+                        Log.info(String(format: "Indicator test %@: %.2f s CPU in 12 s (%.1f %%), footprint %@ MB", mascot.rawValue,
+                                        used, used / 12 * 100, Self.footprintMB()), "test")
+                        Indicator.shared.hide()
+                        Memory.giveBackSoon()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { MainActor.assumeIsolated { next() } }
+                        return
+                    }
+                    Indicator.shared.level(elapsed < 10 ? 0.6 : 0.02)
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            MainActor.assumeIsolated {
+                Log.info("Indicator test start: footprint \(Self.footprintMB()) MB", "test")
+                next()
+            }
+        }
+    }
+
     /// `--transcribe-file <audio>`: transcribes a file with the current engine (no microphone, no
     /// paste) and logs the text, the time and the footprint; for checking the model on prepared
     /// speech (`say -v Milena -o test.aiff "…"`).

@@ -36,3 +36,47 @@ which exits on unload, brought Diktant back to 15–17 MB idle after dictation, 
 
 Popup open: 20 MB (Diktant) + the helper while the model is loaded. 9 s voice message transcribed
 in 0.46 s (model start included), 3 s in 0.05 s; reopening shows cached text at once.
+
+## Genius Typer 0.13.1: everything after the merge (2026-10-26)
+
+Profiling build (`PROFILE=1 scripts/install.sh`), M1-series, macOS 26.6.
+
+| Check | Result |
+|---|---|
+| Idle after launch (`scripts/profile.py 30`) | 23 MB, 0.03 % CPU, 0 wake-ups/s |
+| `--stress-test` (panel ×10 + clipboard history ×10, 3 rounds) | 41.6 → 38.9 → 41.7 MB; live heap 13.20 → 13.23 MB after rounds 1 and 3 (`heap`) |
+| `--dictation-stress-test` (all settings pages + model load/run/unload, 3 rounds) | 41.1 → 41.4 → 41.4 MB, helper 34.5–34.7 MB and exits on unload; pages open in 40–118 ms (first `general` 275 ms) |
+| `leaks` | 286 objects, 14 KB, all inside macOS (`NSXPCConnection` "com.apple.linkd.autoShortcut" cycles of App Intents), none of ours |
+| `--transcribe-file` (10 s of `say -v Milena`) | exact text; 0.35 s with the helper start, 0.08 s warm; app 20 MB + helper 36 MB |
+
+After the settings window has been opened once the app stays at ~41 MB instead of 23: +6 MB of
+live one-time runtime caches (Swift metadata, method caches, SwiftUI type descriptors; they do not
+grow on reopening) and ~13 MB of freed but fragmented malloc pages that
+`malloc_zone_pressure_relief` cannot return (the same effect as with the model in-process, see
+above). Not a leak; moving the settings window into its own process would be the only cure.
+
+### Dictation pill and animations (`--indicator-test`)
+
+12 s per animation (10 s of steady speech, 2 s quiet), CPU of the app, two rounds:
+
+| | Before (APNG, layer shadow) | 0.13.1 (`.frames`, baked shadow) |
+|---|---|---|
+| Pill only (the default) | 1.2–1.9 % | 1.2–1.3 % |
+| Monkey | 4.9–5.4 % | 3.2–3.3 % |
+| Grey cat | 3.8–4.9 % | 2.7–3.2 % |
+| Cat in a wig | 4.5–4.8 % | 2.9–3.2 % |
+| Bruce | 6.0–7.1 % | 3.6–5.2 % |
+| Footprint while shown | 24.8–26.1 MB | 23.6–24.1 MB |
+
+What `sample` showed: with the pill alone the app is asleep nearly all the time (the level
+bars, now their own view, redraw ~12 times a second; the text twice a second). With an animation
+the time went into PNG decoding (zlib inflate + PNG filters, ~1 ms a frame at 12–15 fps).
+Measured per frame: APNG 0.8–1.5 ms, the same frames as HEIC ~4 ms, raw RGBA with LZFSE 0.15 ms,
+LZ4 0.05 ms (1.3× bigger than LZFSE). Now `scripts/make-mascot-frames.swift` stores the frames at
+the size they are shown (96 pt high at 2×) with the shadow baked in (Core Animation blurred a
+layer shadow for every new frame, in WindowServer), LZFSE-compressed, memory-mapped (clean
+pages, not in the footprint): 16 MB in the bundle instead of 19 MB.
+What is left of an animation's cost: LZFSE decoding, and Core Animation converting each frame
+from sRGB to the screen's colours (vImage, ~40 % of it). Tagging the frames with the screen's
+colour space would remove that, but colours would be slightly off on the P3 built-in screen; kept
+correct. WindowServer's own CPU could not be measured: it was at ~42 % from the rest of the screen.

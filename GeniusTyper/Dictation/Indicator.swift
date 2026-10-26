@@ -27,7 +27,7 @@ final class Indicator {
         hideWork = nil
         let pill = makeIfNeeded()
         pill.state = state
-        if case .recording = state { pill.levels = Array(repeating: 0, count: PillView.barCount) }
+        if case .recording = state { pill.bars.reset() }
         if case .message = state {
             removeMascot()
         } else if mascot == nil, let view = MascotView(Mascot.current) {
@@ -47,9 +47,7 @@ final class Indicator {
     /// Microphone level 0…1 (about 12 times a second while recording).
     func level(_ value: Float) {
         guard let pill, case .recording = pill.state else { return }
-        pill.levels.removeFirst()
-        pill.levels.append(CGFloat(value))
-        pill.needsDisplay = true
+        pill.bars.push(CGFloat(value))
         mascot?.heard(loud: value > 0.3)
     }
 
@@ -119,8 +117,8 @@ final class Indicator {
         var size = pillSize
         if let mascot {
             size.width = max(size.width, mascot.frame.width)
-            size.height += mascot.frame.height + 2
-            mascot.setFrameOrigin(NSPoint(x: ((size.width - mascot.frame.width) / 2).rounded(), y: pillSize.height + 2))
+            size.height += mascot.frame.height + 2 - MascotView.shadowPad
+            mascot.setFrameOrigin(NSPoint(x: ((size.width - mascot.frame.width) / 2).rounded(), y: pillSize.height + 2 - MascotView.shadowPad))
         }
         pill.frame = NSRect(x: ((size.width - pillSize.width) / 2).rounded(), y: 0, width: pillSize.width, height: pillSize.height)
         let mouse = NSEvent.mouseLocation
@@ -155,12 +153,32 @@ final class Indicator {
     }
 }
 
+/// The pill: background, dot and text, redrawn twice a second at most (the clock). The level bars
+/// are their own small view, so the ~12 level updates a second redraw only them.
 private final class PillView: NSView {
     static let barCount = 5
 
-    var state: Indicator.State = .transcribing { didSet { needsDisplay = true } }
-    var levels: [CGFloat] = Array(repeating: 0, count: barCount)
+    var state: Indicator.State = .transcribing {
+        didSet {
+            needsDisplay = true
+            if case .recording = state { bars.isHidden = false } else { bars.isHidden = true }
+        }
+    }
+    let bars = BarsView(frame: NSRect(x: 0, y: 0, width: CGFloat(barCount) * 5, height: 16))
     var tick = 0
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        addSubview(bars)
+        bars.isHidden = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        bars.setFrameOrigin(NSPoint(x: newSize.width - 14 - bars.frame.width + 1, y: ((newSize.height - bars.frame.height) / 2).rounded()))
+    }
 
     private static let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
     private static let textAttributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor(white: 0.95, alpha: 1)]
@@ -217,13 +235,30 @@ private final class PillView: NSView {
         let string = text as NSString
         let size = string.size(withAttributes: Self.textAttributes)
         string.draw(at: NSPoint(x: x, y: midY - size.height / 2), withAttributes: Self.textAttributes)
+    }
+}
 
-        guard case .recording = state else { return }
-        x = rect.maxX - 14 - CGFloat(Self.barCount) * 5 + 1
+/// The microphone level bars, newest on the right.
+private final class BarsView: NSView {
+    private var levels = Array(repeating: CGFloat(0), count: PillView.barCount)
+
+    func reset() {
+        levels = Array(repeating: 0, count: PillView.barCount)
+        needsDisplay = true
+    }
+
+    func push(_ level: CGFloat) {
+        levels.removeFirst()
+        levels.append(level)
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
         NSColor(white: 0.95, alpha: 1).setFill()
+        var x: CGFloat = 0
         for level in levels {
             let height = max(3, min(16, 3 + level * 13))
-            NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
+            NSBezierPath(roundedRect: NSRect(x: x, y: (bounds.height - height) / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
             x += 5
         }
     }
