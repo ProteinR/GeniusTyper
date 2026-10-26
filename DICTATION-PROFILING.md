@@ -153,3 +153,19 @@ Footprint 23.8–26.3 MB, not growing between rounds.
 
 **No timer in the pill (2026-10-27).** The clock is gone and the level row took its place (14
 bars, 28 thin ones, a 75-point line); the pill no longer redraws twice a second while recording.
+
+## 0.14.0 check-up (2026-10-27, the line style)
+
+`scripts/profile.py` (footprint, CPU, idle wake-ups), `--indicator-test` (line rows only),
+`--transcribe-file` on 10 s of synthesized Russian speech:
+
+| | Genius Typer | Engine helper | CPU |
+|---|---|---|---|
+| Idle, just launched | 22 MB | not running | 0.03 %, 0 wake-ups/s |
+| Pill with the line, 12 s | 22.5–23.9 MB | — | 2.8 % (WindowServer within noise) |
+| Transcribing (model loaded in 0.18 s, 10 s of speech in 0.08–0.32 s) | 19.7 MB | 36.0–36.8 MB | — |
+| Idle right after, helper still loaded | 24 MB | 36 MB | ~0 % |
+| Idle after the owner's own use for a while, helper loaded | 31 MB | 41 MB | 0.07 %, 2.4 wake-ups/s |
+
+The helper leaves after `unloadAfterMinutes` (5) without dictation, so idle is ~22–31 MB in all.
+The pill test feeds levels without the microphone: a real dictation adds `AVAudioEngine`'s capture.
