@@ -238,35 +238,35 @@ private final class PillView: NSView {
     }
 }
 
-/// The microphone level bars, newest on the right. They are there from the start as short flat
-/// bars (asked 2026-10-26: dots looked like "wait, loading"), dim until the microphone sends its
-/// first level, then white: you can speak.
+/// The microphone level bars, newest on the right, rising out of a flat white line that is there
+/// from the first frame (asked 2026-10-26: dots, dim bars and bars filling in one by one all read
+/// as "wait, loading"; the line says "listening, speak").
 private final class BarsView: NSView {
-    static let minHeight: CGFloat = 6
     static let maxHeight: CGFloat = 22
+    static let lineHeight: CGFloat = 2
 
     private var levels = Array(repeating: CGFloat(0), count: PillView.barCount)
-    private var hearing = false
 
     func reset() {
         levels = Array(repeating: 0, count: PillView.barCount)
-        hearing = false
         needsDisplay = true
     }
 
     func push(_ level: CGFloat) {
         levels.removeFirst()
         levels.append(level)
-        hearing = true
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0.95, alpha: hearing ? 1 : 0.45).setFill()
+        NSColor(white: 0.95, alpha: 1).setFill()
+        let midY = bounds.height / 2
+        NSBezierPath(roundedRect: NSRect(x: 0, y: midY - Self.lineHeight / 2, width: bounds.width - 2, height: Self.lineHeight),
+                     xRadius: Self.lineHeight / 2, yRadius: Self.lineHeight / 2).fill()
         var x: CGFloat = 0
         for level in levels {
-            let height = max(Self.minHeight, min(Self.maxHeight, Self.minHeight + level * (Self.maxHeight - Self.minHeight)))
-            NSBezierPath(roundedRect: NSRect(x: x, y: (bounds.height - height) / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
+            let height = max(Self.lineHeight, min(Self.maxHeight, level * Self.maxHeight))
+            NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
             x += 5
         }
     }
