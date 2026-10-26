@@ -161,9 +161,11 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   something else was copied. Needs Accessibility (the key taps need it too); without it the text
   stays on the clipboard and the pill says so.
 - **Indicator** (`Indicator`): TypeWhisper's "Overlay" + "Classic": dark pill at the bottom centre
-  of the screen with the pointer: red dot, timer, 5 level bars up to 30 pt (pill 38 pt high; the MacBook
-  microphone gives ~0.3–0.7 for speech, so the bars map 0.1…0.7 onto the height with a 0.7 power
-  curve); a flat white line from the first frame until the first sound, then bars to the end of
+  of the screen with the pointer: red dot, timer, 5 level bars up to 30 pt (pill 38 pt high; `LevelBars`: 0.02…0.40
+  onto the height with a 0.7 power curve, tuned on the owner's recorded voice
+  `Tests/GeniusTyperTests/Fixtures/owner-speech.wav`: silence 0.00, speech mostly 0.15–0.36, peaks
+  ~0.47; `LevelBarsTests` keep it; `-saveDictationAudio <file.wav>` records a new sample and logs
+  its level percentiles); a flat white line from the first frame until the first sound, then bars to the end of
   the dictation, the quiet ones 10 pt (dots read as "loading"; a line coming back in soft speech
   read as "not hearing"; both seen on recorded dictations) (asked 2026-10-26: 3 pt dots, dim bars and bars
   filling in one by one all read as "wait, loading"); "Распознаю…"; short messages

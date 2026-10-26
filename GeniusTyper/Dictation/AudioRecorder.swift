@@ -75,16 +75,32 @@ final class AudioRecorder {
             return buffer
         }
         guard error == nil, let data = out.floatChannelData?[0] else { return }
-        let count = Int(out.frameLength)
-        let chunk = UnsafeBufferPointer(start: data, count: count)
-        var sum: Float = 0
-        for value in chunk { sum += value * value }
-        let rms = count > 0 ? (sum / Float(count)).squareRoot() : 0
+        let chunk = UnsafeBufferPointer(start: data, count: Int(out.frameLength))
         lock.withLock { samples.append(contentsOf: chunk) }
-        // Speech is ~0.02–0.2 RMS: a log scale makes quiet speech visible.
-        let level = max(0, min(1, (20 * log10(max(rms, 1e-5)) + 50) / 40))
+        let level = Self.level(of: chunk)
         if let onLevel {
             DispatchQueue.main.async { onLevel(level) }
+        }
+    }
+
+    /// 16 kHz samples per level: the tap takes 4096 frames of the 48 kHz microphone.
+    static let levelChunk = 1365
+
+    /// Loudness 0…1 of one chunk. Speech is ~0.02–0.2 RMS: a log scale makes quiet speech visible.
+    static func level(of chunk: UnsafeBufferPointer<Float>) -> Float {
+        guard !chunk.isEmpty else { return 0 }
+        var sum: Float = 0
+        for value in chunk { sum += value * value }
+        let rms = (sum / Float(chunk.count)).squareRoot()
+        return max(0, min(1, (20 * log10(max(rms, 1e-5)) + 50) / 40))
+    }
+
+    /// The levels the indicator would get for these samples (for tests on a recorded voice).
+    static func levels(of samples: [Float]) -> [Float] {
+        samples.withUnsafeBufferPointer { all in
+            stride(from: 0, to: all.count, by: levelChunk).map { start in
+                level(of: UnsafeBufferPointer(rebasing: all[start..<min(start + levelChunk, all.count)]))
+            }
         }
     }
 

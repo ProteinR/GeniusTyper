@@ -259,14 +259,8 @@ private final class BarsView: NSView {
     func push(_ level: CGFloat) {
         levels.removeFirst()
         levels.append(level)
-        if Self.loudness(level) > 0 { heardSound = true }
+        if LevelBars.loudness(level) > 0 { heardSound = true }
         needsDisplay = true
-    }
-
-    /// 0…1 of the height. The owner's MacBook microphone gives about 0.3–0.7 for speech (recorded
-    /// 2026-10-26): room noise under 0.1 is 0, loud speech reaches the top.
-    private static func loudness(_ level: CGFloat) -> CGFloat {
-        pow(max(0, min(1, (level - 0.1) / 0.6)), 0.7)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -279,9 +273,18 @@ private final class BarsView: NSView {
         }
         var x: CGFloat = 0
         for level in levels {
-            let height = max(Self.quietHeight, Self.loudness(level) * Self.maxHeight)
+            let height = max(Self.quietHeight, LevelBars.loudness(level) * Self.maxHeight)
             NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
             x += 5
         }
+    }
+}
+
+/// How high a level bar is, 0…1 of its height. Tuned on the owner's voice recorded with the
+/// MacBook microphone (`Tests/GeniusTyperTests/Fixtures/owner-speech.wav`, 2026-10-26): silence
+/// 0.00, speech mostly 0.15–0.36, peaks ~0.47; so 0.02…0.40 spans the height.
+enum LevelBars {
+    static func loudness(_ level: CGFloat) -> CGFloat {
+        pow(max(0, min(1, (level - 0.02) / 0.38)), 0.7)
     }
 }

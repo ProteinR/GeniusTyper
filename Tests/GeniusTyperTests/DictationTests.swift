@@ -240,3 +240,31 @@ final class TelegramVoicesTests: XCTestCase {
         XCTAssertGreaterThan(samples.count, 16_000)
     }
 }
+
+final class LevelBarsTests: XCTestCase {
+    private func ownerLevels() throws -> [CGFloat] {
+        let url = Bundle(for: Self.self).url(forResource: "owner-speech", withExtension: "wav")!
+        return AudioRecorder.levels(of: try AudioRecorder.samples(fromFile: url)).map { CGFloat($0) }
+    }
+
+    func testSilenceIsFlat() throws {
+        let silence = try ownerLevels().filter { $0 < 0.01 }
+        XCTAssertGreaterThan(silence.count, 50)
+        XCTAssertTrue(silence.allSatisfy { LevelBars.loudness($0) == 0 })
+    }
+
+    func testAverageSpeechFillsMostOfTheHeight() throws {
+        let speech = try ownerLevels().filter { $0 >= 0.1 }.map(LevelBars.loudness).sorted()
+        XCTAssertGreaterThan(speech.count, 150)
+        let median = speech[speech.count / 2]
+        XCTAssertGreaterThan(median, 0.6)
+        XCTAssertLessThan(median, 0.85)
+        XCTAssertGreaterThan(speech[speech.count / 10], 0.4)
+    }
+
+    func testLoudSpeechReachesTheTopWithoutStickingThere() throws {
+        let speech = try ownerLevels().filter { $0 >= 0.1 }.map(LevelBars.loudness)
+        XCTAssertEqual(speech.max(), 1)
+        XCTAssertLessThan(Double(speech.filter { $0 >= 1 }.count) / Double(speech.count), 0.1)
+    }
+}

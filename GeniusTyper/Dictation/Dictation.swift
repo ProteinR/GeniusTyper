@@ -109,11 +109,27 @@ final class Dictation: ObservableObject {
         Log.info("Recording into \(targetApp?.localizedName ?? "?")", "dictation")
     }
 
+    /// `-saveDictationAudio <file.wav>` (a launch argument): each dictation's audio is written
+    /// there, as recorded (16 kHz mono), for tests on a real voice. Never on otherwise.
+    private func saveAudioIfAsked(_ samples: [Float]) {
+        guard let path = UserDefaults.standard.string(forKey: "saveDictationAudio") else { return }
+        do {
+            try WAV.encode(samples, sampleRate: Int(AudioRecorder.sampleRate)).write(to: URL(fileURLWithPath: path))
+            let levels = AudioRecorder.levels(of: samples).sorted()
+            let percentile = { (p: Double) in levels.isEmpty ? 0 : levels[min(levels.count - 1, Int(Double(levels.count) * p))] }
+            Log.info(String(format: "Audio saved to %@: levels p10 %.2f, p50 %.2f, p90 %.2f, max %.2f", path,
+                            percentile(0.1), percentile(0.5), percentile(0.9), levels.last ?? 0), "dictation")
+        } catch {
+            Log.error("Audio not saved: \(Log.describe(error))", "dictation")
+        }
+    }
+
     private func finish() {
         guard phase == .recording else { return }
         HotkeyMonitor.shared.watchKeys(false)
         let samples = recorder.stop()
         let duration = Double(samples.count) / AudioRecorder.sampleRate
+        saveAudioIfAsked(samples)
         guard duration >= Self.minimumDuration else {
             phase = .idle
             Indicator.shared.hide()
