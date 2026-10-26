@@ -44,15 +44,18 @@ final class StatusItemController: NSObject {
 
     private func showMenu() {
         let menu = NSMenu()
+        // First, as the most used item; ⌃⌥V does the same from the keyboard.
+        let voices = NSMenuItem(title: String(localized: "Расшифровать голосовое из Telegram"), action: #selector(openVoices), keyEquivalent: "")
+        voices.target = self
+        voices.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)
+        menu.addItem(voices)
+        menu.addItem(.separator())
         let settings = NSMenuItem(title: String(localized: "Настройки…"), action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
         let history = NSMenuItem(title: String(localized: "История…"), action: #selector(openHistory), keyEquivalent: "")
         history.target = self
         menu.addItem(history)
-        let voices = NSMenuItem(title: String(localized: "Голосовые из Telegram"), action: #selector(openVoices), keyEquivalent: "")
-        voices.target = self
-        menu.addItem(voices)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: String(localized: "Завершить Diktant"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         // Attached only for this click, so a left click still opens the window.

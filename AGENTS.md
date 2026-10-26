@@ -49,10 +49,10 @@ Local git only. Started 2026-10-26.
 - **Settings window** (`SettingsWindow`): Основное (key, sounds, Esc, permissions when missing,
   launch at login, app language), Модель, История, Статистика. Built on open, released on close.
 - **Menu bar icon** (`StatusItemController`): mic; red mic.fill while recording; left click opens
-  settings, right click: Настройки…, История…, Голосовые из Telegram, Завершить Diktant.
+  settings, right click: Расшифровать голосовое из Telegram, Настройки…, История…, Завершить Diktant.
 - **Telegram voice messages** (`TelegramVoices`, `VoiceTranscripts`, `VoicePanel`; asked
   2026-10-26): ⌃⌥V (changeable in Основное; a Carbon hot key with id 2, same handler as the
-  dictation combination) or the menu item "Голосовые из Telegram" opens a popup with the 3 newest
+  dictation combination) or the first right-click menu item "Расшифровать голосовое из Telegram" opens a popup with the 3 newest
   voice messages from the official Telegram app's cache
   (`~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable/account-*/postbox/media`,
   files without extension; voice = Ogg Opus, checked by the "OggS"/"OpusHead" header, decoded by
