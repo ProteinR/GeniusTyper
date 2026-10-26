@@ -206,7 +206,7 @@ private final class PillView: NSView {
         }
         var width = 14 + 8 + 8 + textWidth + 14
         if case .recording = state { width += 8 + CGFloat(Self.barCount) * 5 }
-        return NSSize(width: ceil(width), height: 30)
+        return NSSize(width: ceil(width), height: 38)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -242,7 +242,7 @@ private final class PillView: NSView {
 /// from the first frame (asked 2026-10-26: dots, dim bars and bars filling in one by one all read
 /// as "wait, loading"; the line says "listening, speak").
 private final class BarsView: NSView {
-    static let maxHeight: CGFloat = 22
+    static let maxHeight: CGFloat = 30
     static let lineHeight: CGFloat = 2
 
     private var levels = Array(repeating: CGFloat(0), count: PillView.barCount)

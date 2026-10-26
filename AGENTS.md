@@ -161,7 +161,7 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   something else was copied. Needs Accessibility (the key taps need it too); without it the text
   stays on the clipboard and the pill says so.
 - **Indicator** (`Indicator`): TypeWhisper's "Overlay" + "Classic": dark pill at the bottom centre
-  of the screen with the pointer: red dot, timer, 5 level bars up to 22 pt rising out of a flat
+  of the screen with the pointer: red dot, timer, 5 level bars up to 30 pt (pill 38 pt high) rising out of a flat
   white line that is there from the first frame (asked 2026-10-26: 3 pt dots, dim bars and bars
   filling in one by one all read as "wait, loading"); "Распознаю…"; short messages
   (no model, no key, nothing recognised). AppKit-drawn `NSPanel`, built on show, released on hide.
