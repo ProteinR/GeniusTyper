@@ -38,8 +38,10 @@ enum TelegramVoices {
             let names = Set(files.map(\.lastPathComponent))
             for file in files {
                 let name = file.lastPathComponent
-                // Still downloading: Telegram writes "<name>_partial" first.
-                guard !name.hasSuffix("_partial"), !names.contains(name + "_partial"),
+                // Telegram downloads into "<name>_partial"; once complete, "<name>" is a hard link to
+                // it and both stay. A "<name>" next to a different "_partial" file is not finished.
+                guard !name.hasSuffix("_partial"),
+                      !names.contains(name + "_partial") || isSameFile(file, file.deletingLastPathComponent().appendingPathComponent(name + "_partial")),
                       let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]),
                       values.isRegularFile == true, let size = values.fileSize, size > 0, size < maxSize,
                       let date = values.contentModificationDate else { continue }
@@ -55,6 +57,13 @@ enum TelegramVoices {
             result.append(VoiceFile(url: candidate.url, date: candidate.date, duration: duration))
         }
         return result
+    }
+
+    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        let manager = FileManager.default
+        guard let first = (try? manager.attributesOfItem(atPath: a.path))?[.systemFileNumber] as? Int,
+              let second = (try? manager.attributesOfItem(atPath: b.path))?[.systemFileNumber] as? Int else { return false }
+        return first == second
     }
 
     /// "OggS" page with an "OpusHead" header: a voice message (stickers and videos are other formats).

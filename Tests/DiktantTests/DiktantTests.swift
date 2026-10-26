@@ -169,11 +169,17 @@ final class TelegramVoicesTests: XCTestCase {
         try put("telegram-cloud-document-new", voice, age: 10, account: "account-2")
         try put("telegram-cloud-photo", Data([0xFF, 0xD8, 0xFF, 0xE0] + [UInt8](repeating: 0, count: 100)), age: 1)
         try put("telegram-cloud-document-loading", voice, age: 2)
-        try put("telegram-cloud-document-loading_partial", voice, age: 2)
+        try put("telegram-cloud-document-loading_partial", voice + voice, age: 2)
+        try put("telegram-cloud-document-started_partial", voice, age: 2)
+        // A finished download: the file is a hard link to its "_partial" and both stay.
+        try put("telegram-cloud-document-done_partial", voice, age: 20)
+        let media = root.appendingPathComponent("account-1/postbox/media", isDirectory: true)
+        try FileManager.default.linkItem(at: media.appendingPathComponent("telegram-cloud-document-done_partial"),
+                                         to: media.appendingPathComponent("telegram-cloud-document-done"))
         try put("accounts-metadata", Data(), age: 0, account: "other")
 
         let found = TelegramVoices.latest(limit: 3, in: root)
-        XCTAssertEqual(found.map(\.url.lastPathComponent), ["telegram-cloud-document-new", "telegram-cloud-document-old"])
+        XCTAssertEqual(found.map(\.url.lastPathComponent), ["telegram-cloud-document-new", "telegram-cloud-document-done", "telegram-cloud-document-old"])
         XCTAssertEqual(found[0].duration, 2.5, accuracy: 2.0)
         XCTAssertEqual(TelegramVoices.latest(limit: 1, in: root).count, 1)
     }
