@@ -1,6 +1,7 @@
 # Genius Typer: agent guide
 
-GitHub: ProteinR/GeniusTyper (private; was ProteinR/GeniusSwitcher). App `~/Applications/Genius Typer.app`,
+GitHub: ProteinR/GeniusTyper (was ProteinR/GeniusSwitcher; prepared for a public repository on
+2026-10-26: README.md / README.ru.md, SETTINGS.md, MIT `LICENSE`). App `~/Applications/Genius Typer.app`,
 bundle ID `com.dmemruk.GeniusTyper`, module and folder `GeniusTyper`.
 
 Personal macOS menu bar app for everything about typing text: **Genius Switcher** (RU/EN layout
@@ -163,9 +164,10 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
 - **Indicator** (`Indicator`): TypeWhisper's "Overlay" + "Classic": dark pill at the bottom centre
   of the screen with the pointer: red dot, timer, 5 level bars up to 30 pt (pill 38 pt high; `LevelBars`: 0.02…0.40
   onto the height with a 0.7 power curve, tuned on the owner's recorded voice
-  `Tests/GeniusTyperTests/Fixtures/owner-speech.wav`: silence 0.00, speech mostly 0.15–0.36, peaks
-  ~0.47; `LevelBarsTests` keep it; `-saveDictationAudio <file.wav>` records a new sample and logs
-  its level percentiles); a flat white line from the first frame until the first sound, then bars to the end of
+  (silence 0.00, speech mostly 0.15–0.36, peaks ~0.47; only its levels are kept, in
+  `Tests/GeniusTyperTests/Fixtures/owner-speech-levels.txt`, the public repository has no voice;
+  `LevelBarsTests` keep it; `-saveDictationAudio <file.wav>` records a new sample and logs its level
+  percentiles, `scripts/audio-levels.swift` turns it into levels); a flat white line from the first frame until the first sound, then bars to the end of
   the dictation, the quiet ones 10 pt (dots read as "loading"; a line coming back in soft speech
   read as "not hearing"; both seen on recorded dictations) (asked 2026-10-26: 3 pt dots, dim bars and bars
   filling in one by one all read as "wait, loading"); "Распознаю…"; short messages
@@ -260,6 +262,16 @@ Sounds: start = own two short bass notes up a fourth (165 → 220 Hz) `GeniusTyp
 sine tap at 740 Hz `GeniusTyper/Dictation/Sounds/success.wav` (`scripts/make-sounds.swift`, in the spirit of
 Claude's voice-mode sounds; a brighter C6 bell with overtones was too sharp for the owner, and
 system Pop sounded like a failure, so Pop now means nothing recognised / error), Esc = Funk.
+
+## Public repository
+
+Anyone can read the repository and its history. Never commit the owner's recordings (voice, screen),
+clipboard contents, journal or words log, screenshots of the clipboard or dictation history, keys or
+personal paths; a test on real data keeps derived numbers only (as `owner-speech-levels.txt`). The
+owner's voice sample was removed from the whole history on 2026-10-26. Keep README.md, README.ru.md
+and SETTINGS.md in step with features and settings keys. The signing identity is
+`GENIUSTYPER_SIGN_IDENTITY` or the first of "Genius Typer Local Code Signing" / "dmemruk Local
+Code Signing".
 
 ## Privacy rule
 

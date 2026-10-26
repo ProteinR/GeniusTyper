@@ -414,7 +414,7 @@ enum LevelStyle: String, CaseIterable, Identifiable {
 }
 
 /// How high a level bar is, 0…1 of its height. Tuned on the owner's voice recorded with the
-/// MacBook microphone (`Tests/GeniusTyperTests/Fixtures/owner-speech.wav`, 2026-10-26): silence
+/// MacBook microphone (2026-10-26; its levels in `Tests/GeniusTyperTests/Fixtures/owner-speech-levels.txt`): silence
 /// 0.00, speech mostly 0.15–0.36, peaks ~0.47; so 0.02…0.40 spans the height.
 enum LevelBars {
     static func loudness(_ level: CGFloat) -> CGFloat {

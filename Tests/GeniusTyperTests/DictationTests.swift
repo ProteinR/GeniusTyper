@@ -242,9 +242,10 @@ final class TelegramVoicesTests: XCTestCase {
 }
 
 final class LevelBarsTests: XCTestCase {
+    /// The levels of the owner's recorded voice (`scripts/audio-levels.swift`; the audio is not kept).
     private func ownerLevels() throws -> [CGFloat] {
-        let url = Bundle(for: Self.self).url(forResource: "owner-speech", withExtension: "wav")!
-        return AudioRecorder.levels(of: try AudioRecorder.samples(fromFile: url)).map { CGFloat($0) }
+        let url = Bundle(for: Self.self).url(forResource: "owner-speech-levels", withExtension: "txt")!
+        return try String(contentsOf: url, encoding: .utf8).split(separator: "\n").compactMap { Double($0) }.map { CGFloat($0) }
     }
 
     func testSilenceIsFlat() throws {

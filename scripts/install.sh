@@ -7,10 +7,16 @@ PRODUCT="build/dd/Build/Products/Release/$APP.app"
 xcodegen generate -q
 xcodebuild -project GeniusTyper.xcodeproj -scheme GeniusTyper -configuration Release \
   -derivedDataPath build/dd build -quiet
-# Re-sign with the stable local certificate (the one MeetRec uses). Its designated requirement is the
-# certificate, not the build hash, so the Input Monitoring permission survives rebuilds.
-IDENTITY="dmemruk Local Code Signing"
-if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
+# Re-sign with a stable local certificate. Its designated requirement is the certificate, not the
+# build hash, so the Input Monitoring permission survives rebuilds.
+# GENIUSTYPER_SIGN_IDENTITY names it; else the first of the usual names found (README: how to make one).
+IDENTITY="${GENIUSTYPER_SIGN_IDENTITY:-}"
+if [ -z "$IDENTITY" ]; then
+  for name in "Genius Typer Local Code Signing" "dmemruk Local Code Signing"; do
+    if security find-certificate -c "$name" >/dev/null 2>&1; then IDENTITY="$name"; break; fi
+  done
+fi
+if [ -n "$IDENTITY" ] && security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
   # PROFILE=1: also allow attaching tools (leaks, Instruments allocations); same certificate, so
   # the permissions stay.
   if [ "${PROFILE:-0}" = "1" ]; then
@@ -19,7 +25,7 @@ if security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
     codesign --force --deep -s "$IDENTITY" "$PRODUCT"
   fi
 else
-  echo "warning: certificate '$IDENTITY' not found; app stays ad-hoc signed and permissions reset on every rebuild" >&2
+  echo "warning: no signing certificate found (set GENIUSTYPER_SIGN_IDENTITY, see README); app stays ad-hoc signed and permissions reset on every rebuild" >&2
 fi
 # Quit gracefully; kill only if it does not quit in time.
 if pgrep -qx "$APP"; then
