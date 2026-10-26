@@ -20,8 +20,6 @@ final class Indicator {
     private var mascot: MascotView?
     private var timer: Timer?
     private var hideWork: DispatchWorkItem?
-    /// When the voice was last loud: the mascot keeps typing a moment after, through short pauses.
-    private var lastLoud = Date.distantPast
     private var demoTimer: Timer?
 
     func show(_ state: State) {
@@ -37,7 +35,6 @@ final class Indicator {
             panel?.hasShadow = false // a stale shadow of the previous frame would stay around
             mascot = view
         }
-        mascot?.typing = false
         place()
         startTimer(for: state)
         if case .message = state {
@@ -53,8 +50,7 @@ final class Indicator {
         pill.levels.removeFirst()
         pill.levels.append(CGFloat(value))
         pill.needsDisplay = true
-        if value > 0.3 { lastLoud = Date() }
-        mascot?.typing = Date().timeIntervalSince(lastLoud) < 0.4
+        mascot?.heard(loud: value > 0.3)
     }
 
     /// The pill as when dictating, with made-up speech: 1.5 s talking, 1 s silent, 6 s in all.

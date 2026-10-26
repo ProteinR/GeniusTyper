@@ -232,6 +232,7 @@ private struct HistorySide: View {
                             }
                         }
                     }
+                    .padding(.trailing, 14) // room for the scroll bar
                 }
                 .frame(height: 360)
             }

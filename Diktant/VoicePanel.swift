@@ -180,6 +180,8 @@ struct VoicesView: View {
                         .disabled(model.isLoading)
                     }
                 }
+                // Room for the scroll bar, which is drawn over the content (the copy buttons).
+                .padding(.trailing, 14)
             }
             .scrollIndicators(.automatic)
             .frame(height: min(listHeight, maxListHeight))

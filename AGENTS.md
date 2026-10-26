@@ -41,12 +41,18 @@ Local git only. Started 2026-10-26.
   of the screen with the pointer: red dot, timer, 5 level bars; "Распознаю…"; short messages
   (no model, no key, nothing recognised). AppKit-drawn `NSPanel`, built on show, released on hide.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
-  `--indicator-demo`): a monkey, one of two cats or Bruce Almighty (added 2026-10-26, all 48 frames) above the pill while recording/transcribing,
-  typing while the level is above 0.3 (and 0.4 s after), frozen otherwise. Cut out of the owner's
+  `--indicator-demo`): a monkey, one of two cats or Bruce Almighty above the pill while recording/transcribing,
+  typing at full speed while the level is above 0.3 (and 0.2 s after), then slowing down
+  smoothly over 1.2 s to a stop (asked 2026-10-26: a hard stop on every pause between words looked
+  like stutter). Cut out of the owner's
   GIFs with Vision by `scripts/make-mascots.swift` (largest subject only, frames where the laptop
   got lifted too are dropped; monkey: frames 106–151,0–43, every 2nd, without the facepalm) into
   `Diktant/Mascots/*.apng` (not .png: Xcode would recompress and lose the animation). One frame
-  decoded at a time: ~+3 MB while shown.
+  decoded at a time: ~+3 MB while shown. Bruce (replaced 2026-10-26 by the owner's green-screen clip
+  `m2-res_480p.mp4`, cut with ffmpeg `chromakey=0x12FF08:0.2:0.05,despill`, 15 fps, 240 px high):
+  two views, one picked at random per dictation — front (crop 854:467:0:13; slow 1.0–4.0 s, fast
+  4.3–6.3 s) and side (crop 690:460:110:20; slow 6.7–8.9 s, fast 11.55–13.9 s). Each starts slow
+  and switches to the fast loop after 3 s of speech; a pause over 1.5 s starts slow again.
 - **History** (`History`, SQLite `~/Library/Application Support/Diktant/history.sqlite`): text
   only (no audio), forever: date, text, words, duration, app, model. Paged from disk, Cyrillic
   case-insensitive search (`lower_ru`), copy, delete.
