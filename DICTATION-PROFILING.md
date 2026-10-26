@@ -89,6 +89,18 @@ are higher than 1.2 % there; compare the rows with each other.
 
 The line is the only style that redraws on its own (60 times a second, the speed of the preview
 the owner chose); the bars and the wave redraw only when a level arrives (~12 a second).
+
+**0.13.13: the line on a `CAShapeLayer`.** Each frame now only builds a 40-point `CGPath` and
+hands it to a shape layer (actions off); Core Animation draws it, the view is never redrawn, and
+once the line is flat in silence nothing is sent at all. Same speed and look (recorded). Re-run,
+WindowServer baseline 43.6 %:
+
+| | App CPU | WindowServer |
+|---|---|---|
+| Полоски | 2.2–2.4 % | 43.4–43.6 % |
+| Плотная волна | 2.5 % | 43.3–44.1 % |
+| Линия (60 fps) | **3.2–3.4 %** (was 9.3–9.6 %) | 43.5–43.7 % |
+| Полоски + monkey / grey cat / cat in a wig / Bruce | 4.8–5.2 / 4.3 / 4.6–4.7 / 5.7 % | 43.8–44.4 % |
 WindowServer stays within ~1.5 % of its baseline for all of them. Footprint does not grow
 between rounds.
 

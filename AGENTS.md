@@ -173,8 +173,9 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   **Level style** (`LevelStyle`, Диктовка → Индикатор, asked 2026-10-26 after an interactive
   preview of six): "Полоски" (above, default), "Плотная волна" (16 thin bars scrolling, a dotted
   line in silence, like Voice Memos) and "Линия" (a smooth oscilloscope line that swings with the
-  voice; its own 60 fps timer only while recording, the speed of the preview; ~9.5 % CPU then
-  against ~2.4 % for the bars, stopped on hide; `DICTATION-PROFILING.md`). The demo
+  voice; its own 60 fps timer only while recording, the speed of the preview; a `CAShapeLayer`
+  gets a new path each frame and the view is never redrawn: ~3.3 % CPU then against ~2.3 % for
+  the bars, ~9.5 % when it was drawn in `draw(_:)`; stopped on hide; `DICTATION-PROFILING.md`). The demo
   ("Показать", `--indicator-demo`) uses the owner's levels.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
   `--indicator-demo`): a monkey, one of two cats or Bruce Almighty above the pill while recording/transcribing,

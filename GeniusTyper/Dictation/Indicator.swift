@@ -262,6 +262,7 @@ private final class BarsView: NSView {
     private var phase: CGFloat = 0
     private var trace: [CGFloat] = []
     private var animation: Timer?
+    private var lineLayer: CAShapeLayer?
 
     func reset(style: LevelStyle) {
         self.style = style
@@ -272,7 +273,22 @@ private final class BarsView: NSView {
         smooth = 0
         target = 0
         stopAnimating()
-        if style == .line { startAnimating() }
+        lineLayer?.removeFromSuperlayer()
+        lineLayer = nil
+        if style == .line {
+            wantsLayer = true
+            let layer = CAShapeLayer()
+            layer.frame = bounds
+            layer.fillColor = nil
+            layer.strokeColor = NSColor(white: 0.95, alpha: 1).cgColor
+            layer.lineWidth = 2
+            layer.lineCap = .round
+            layer.lineJoin = .round
+            self.layer?.addSublayer(layer)
+            lineLayer = layer
+            updateLine()
+            startAnimating()
+        }
         needsDisplay = true
     }
 
@@ -300,12 +316,31 @@ private final class BarsView: NSView {
         animation = timer
     }
 
+    /// One frame of the line: the shape layer gets a new path, which Core Animation draws, so the
+    /// view itself is never redrawn (that took ~9.5 % CPU at 60 fps). In silence, once the line is
+    /// flat, nothing changes and nothing is sent.
     private func step() {
         smooth += (target - smooth) * 0.25
+        if smooth < 0.001, target == 0 { smooth = 0 }
+        let flat = smooth == 0 && trace.allSatisfy { $0 == 0 }
         phase += 0.12 + smooth * 0.3
         trace.removeFirst()
         trace.append(smooth)
-        needsDisplay = true
+        if !flat { updateLine() }
+    }
+
+    private func updateLine() {
+        guard let lineLayer else { return }
+        let midY = bounds.height / 2
+        let path = CGMutablePath()
+        for (index, value) in trace.enumerated() {
+            let point = CGPoint(x: 1 + CGFloat(index) * 1.3, y: midY + value * (Self.maxHeight / 2 - 2) * sin(CGFloat(index) * 0.9 + phase * 2))
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        lineLayer.path = path
+        CATransaction.commit()
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -313,7 +348,7 @@ private final class BarsView: NSView {
         switch style {
         case .bars: drawBars(midY: midY)
         case .wave: drawWave(midY: midY)
-        case .line: drawLine(midY: midY)
+        case .line: break
         }
     }
 
@@ -340,19 +375,6 @@ private final class BarsView: NSView {
             NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 2, height: height), xRadius: 1, yRadius: 1).fill()
             x += 3.5
         }
-    }
-
-    private func drawLine(midY: CGFloat) {
-        let path = NSBezierPath()
-        path.lineWidth = 2
-        path.lineCapStyle = .round
-        path.lineJoinStyle = .round
-        for (index, value) in trace.enumerated() {
-            let point = NSPoint(x: 1 + CGFloat(index) * 1.3, y: midY + value * (Self.maxHeight / 2 - 2) * sin(CGFloat(index) * 0.9 + phase * 2))
-            if index == 0 { path.move(to: point) } else { path.line(to: point) }
-        }
-        NSColor(white: 0.95, alpha: 1).setStroke()
-        path.stroke()
     }
 }
 
