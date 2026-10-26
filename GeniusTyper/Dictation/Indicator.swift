@@ -164,7 +164,7 @@ private final class PillView: NSView {
             if case .recording = state { bars.isHidden = false } else { bars.isHidden = true }
         }
     }
-    let bars = BarsView(frame: NSRect(x: 0, y: 0, width: CGFloat(barCount) * 5, height: 16))
+    let bars = BarsView(frame: NSRect(x: 0, y: 0, width: CGFloat(barCount) * 5, height: BarsView.maxHeight))
     var tick = 0
 
     override init(frame: NSRect) {
@@ -238,26 +238,34 @@ private final class PillView: NSView {
     }
 }
 
-/// The microphone level bars, newest on the right.
+/// The microphone level bars, newest on the right. They are there from the start as short flat
+/// bars (asked 2026-10-26: dots looked like "wait, loading"), dim until the microphone sends its
+/// first level, then white: you can speak.
 private final class BarsView: NSView {
+    static let minHeight: CGFloat = 6
+    static let maxHeight: CGFloat = 22
+
     private var levels = Array(repeating: CGFloat(0), count: PillView.barCount)
+    private var hearing = false
 
     func reset() {
         levels = Array(repeating: 0, count: PillView.barCount)
+        hearing = false
         needsDisplay = true
     }
 
     func push(_ level: CGFloat) {
         levels.removeFirst()
         levels.append(level)
+        hearing = true
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0.95, alpha: 1).setFill()
+        NSColor(white: 0.95, alpha: hearing ? 1 : 0.45).setFill()
         var x: CGFloat = 0
         for level in levels {
-            let height = max(3, min(16, 3 + level * 13))
+            let height = max(Self.minHeight, min(Self.maxHeight, Self.minHeight + level * (Self.maxHeight - Self.minHeight)))
             NSBezierPath(roundedRect: NSRect(x: x, y: (bounds.height - height) / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
             x += 5
         }
