@@ -83,15 +83,15 @@ enum TelegramVoices {
         return (result, index)
     }
 
-    /// One opening's look at the cache: voice messages since `since` not yet `known` (keys of
-    /// stored texts), keys of the files there that are not voices (so the next opening skips their
+    /// One opening's look at the cache: voice messages since `since` not yet `known` (paths of
+    /// stored texts: Telegram may touch a file again, so its date is no part of who it is), keys of the files there that are not voices (so the next opening skips their
     /// headers), and the older files left for "more", newest first.
     static func scan(_ candidates: [Candidate], since: Date, known: Set<String>, notVoices: Set<String>)
         -> (fresh: [VoiceFile], others: [String], older: [Candidate]) {
         var recent: [Candidate] = [], older: [Candidate] = []
         for candidate in candidates {
+            guard !known.contains(candidate.url.path) else { continue }
             let key = VoiceText.key(path: candidate.url.path, date: candidate.date)
-            guard !known.contains(key) else { continue }
             if candidate.date >= since {
                 if !notVoices.contains(key) { recent.append(candidate) }
             } else {
@@ -123,6 +123,8 @@ struct VoiceText: Codable, Equatable {
     let text: String
     /// When it was transcribed.
     let added: Date
+    /// Deleted by the user: kept without its text, so the file is not transcribed again.
+    var deleted: Bool? = nil
 
     var key: String { Self.key(path: path, date: date) }
     var file: VoiceFile { VoiceFile(url: URL(fileURLWithPath: path), date: date, duration: duration) }
@@ -136,6 +138,18 @@ struct VoiceText: Codable, Equatable {
     static func kept(_ texts: [VoiceText], days: Int, now: Date = Date()) -> [VoiceText] {
         let since = now.addingTimeInterval(-TimeInterval(days) * 86_400)
         return texts.filter { max($0.date, $0.added) >= since }
+    }
+
+    /// One text per file. Before 0.14.0 a text was stored per path and file date, and Telegram
+    /// touching a file again (a new date) got it transcribed and stored twice (2026-10-27): a
+    /// deletion wins, otherwise the latest transcription.
+    static func unique(_ texts: [VoiceText]) -> [VoiceText] {
+        var byPath: [String: VoiceText] = [:]
+        for text in texts {
+            if let kept = byPath[text.path], kept.deleted == true || (text.deleted != true && kept.added > text.added) { continue }
+            byPath[text.path] = text
+        }
+        return texts.filter { byPath[$0.path] == $0 }
     }
 
     /// The stored list; also the format before 0.13.0 (`key` = "path|seconds since 1970", `text`).
@@ -175,6 +189,10 @@ final class VoiceTranscripts: ObservableObject {
     @Published private(set) var isChecking = false
     @Published private(set) var isLoading = false
     @Published private(set) var hasMore = false
+    /// The first item of the page "more" just added, for the list to bring into view. Only for
+    /// "more": new voice messages found on opening join at the top, and scrolling to where the
+    /// list used to end jumped to the bottom (2026-10-27).
+    @Published private(set) var newPage: String?
     @Published private(set) var problem: String?
 
     /// How many more each "more" (scroll past the end, ↓, the button) adds.
@@ -204,10 +222,10 @@ final class VoiceTranscripts: ObservableObject {
             texts = kept
             save()
         }
-        items = texts.sorted { $0.date > $1.date }.map { Item(file: $0.file, text: .done($0.text)) }
+        items = texts.filter { $0.deleted != true }.sorted { $0.date > $1.date }.map { Item(file: $0.file, text: .done($0.text)) }
         isChecking = true
         let since = now.addingTimeInterval(-TimeInterval(days) * 86_400)
-        let known = Set(texts.map(\.key)), notVoices = notVoices
+        let known = Set(texts.map(\.path)), notVoices = notVoices
         loader = Task {
             let found = await Task.detached(priority: .userInitiated) {
                 TelegramVoices.scan(TelegramVoices.candidates(), since: since, known: known, notVoices: notVoices)
@@ -248,6 +266,7 @@ final class VoiceTranscripts: ObservableObject {
             next = page.next
             hasMore = page.next < older.count
             add(page.files)
+            newPage = page.files.first?.url.path
             transcribeWaiting()
         }
     }
@@ -293,6 +312,16 @@ final class VoiceTranscripts: ObservableObject {
         }
     }
 
+    /// Removes a voice message's text from the list and the store; the file is remembered as
+    /// deleted, so it is not transcribed again while it is in Telegram's cache.
+    func delete(_ item: Item) {
+        items.removeAll { $0.id == item.id }
+        let path = item.file.url.path
+        texts.removeAll { $0.path == path }
+        texts.append(VoiceText(path: path, date: item.file.date, duration: item.file.duration, text: "", added: Date(), deleted: true))
+        save()
+    }
+
     /// The popup closed: drop the list (the texts stay stored).
     func clear() {
         loader?.cancel()
@@ -300,6 +329,7 @@ final class VoiceTranscripts: ObservableObject {
         job?.cancel()
         job = nil
         items = []
+        newPage = nil
         older = []
         next = 0
         hasMore = false
@@ -314,12 +344,12 @@ final class VoiceTranscripts: ObservableObject {
 
     private static func load() -> [VoiceText] {
         guard let data = try? Data(contentsOf: storeURL) else { return [] }
-        return VoiceText.decode(data)
+        return VoiceText.unique(VoiceText.decode(data))
     }
 
     private func remember(_ text: String, for file: VoiceFile) {
         let entry = VoiceText(path: file.url.path, date: file.date, duration: file.duration, text: text, added: Date())
-        texts.removeAll { $0.key == entry.key }
+        texts.removeAll { $0.path == entry.path }
         texts.append(entry)
         save()
     }

@@ -1,7 +1,7 @@
 import AppKit
 
 /// The small dark pill at the bottom centre of the screen (TypeWhisper's "Overlay", "Classic"
-/// theme): red dot, timer and level bars while recording; "Распознаю…" while transcribing; a
+/// theme): red dot and level bars while recording (no timer since 2026-10-27: the bars got its place); "Распознаю…" while transcribing; a
 /// short message otherwise; the chosen `Mascot` above it while recording and transcribing.
 /// Plain AppKit drawing, no SwiftUI. The window exists only while shown:
 /// it is built on show and released on hide, and its timer runs only then.
@@ -21,11 +21,24 @@ final class Indicator {
     private var timer: Timer?
     private var hideWork: DispatchWorkItem?
     private var demoTimer: Timer?
+    /// The level bars' scale while recording, learnt from the levels (`LevelScale`); kept for
+    /// `microphone` when the recording ends (the demo and tests have none: nothing is kept).
+    private var scale = LevelScale.standard
+    private var microphone: String?
+    private var lastLevel: CFTimeInterval = 0
+    private var speechSeconds: Double = 0
 
-    func show(_ state: State) {
+    func show(_ state: State, microphone: String? = nil) {
         hideWork?.cancel()
         hideWork = nil
         let pill = makeIfNeeded()
+        if case .recording = pill.state, case .recording = state {} else { endRecording() }
+        if case .recording = state, pill.state != state {
+            self.microphone = microphone
+            scale = microphone.flatMap { Prefs.levelScales[$0] } ?? .standard
+            lastLevel = CACurrentMediaTime()
+            speechSeconds = 0
+        }
         pill.state = state
         if case .recording = state { pill.bars.reset(style: LevelStyle.current) }
         if case .message = state {
@@ -47,8 +60,23 @@ final class Indicator {
     /// Microphone level 0…1 (about 12 times a second while recording).
     func level(_ value: Float) {
         guard let pill, case .recording = pill.state else { return }
-        pill.bars.push(CGFloat(value))
-        mascot?.heard(loud: value > 0.3)
+        let now = CACurrentMediaTime()
+        let elapsed = min(0.25, now - lastLevel)
+        lastLevel = now
+        let level = CGFloat(value)
+        scale.update(level, elapsed: elapsed)
+        let loudness = scale.loudness(level)
+        if loudness > 0.3 { speechSeconds += elapsed }
+        pill.bars.push(loudness)
+        mascot?.heard(loud: loudness > 0.8)
+    }
+
+    /// The recording is over: keep what the scale learnt for this microphone, if it heard speech.
+    private func endRecording() {
+        guard let microphone, speechSeconds >= 1 else { return }
+        self.microphone = nil
+        Prefs.levelScales[microphone] = scale
+        Log.info(String(format: "Level scale for %@: floor %.2f, peak %.2f", microphone, scale.floor, scale.peak), "dictation")
     }
 
     /// The pill as when dictating, with made-up speech at the owner's levels (silence 0, speech
@@ -78,6 +106,7 @@ final class Indicator {
     func hide() {
         hideWork?.cancel()
         hideWork = nil
+        endRecording()
         timer?.invalidate()
         timer = nil
         removeMascot()
@@ -137,9 +166,8 @@ final class Indicator {
         timer = nil
         let interval: TimeInterval
         switch state {
-        case .recording: interval = 0.5 // the clock
         case .transcribing: interval = 0.3 // the dots
-        case .message: return
+        case .recording, .message: return
         }
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -156,8 +184,8 @@ final class Indicator {
     }
 }
 
-/// The pill: background, dot and text, redrawn twice a second at most (the clock). The level bars
-/// are their own small view, so the ~12 level updates a second redraw only them.
+/// The pill: background, dot and text, drawn once per state ("Распознаю…" a few times a second for
+/// its dots). The level bars are their own layers, so their motion never redraws the pill.
 private final class PillView: NSView {
     var state: Indicator.State = .transcribing {
         didSet {
@@ -192,9 +220,8 @@ private final class PillView: NSView {
 
     private var text: String {
         switch state {
-        case .recording(let since):
-            let seconds = max(0, Int(Date().timeIntervalSince(since)))
-            return String(format: "%d:%02d", seconds / 60, seconds % 60)
+        case .recording:
+            return ""
         case .transcribing:
             return String(localized: "Распознаю") + String(repeating: ".", count: tick % 4)
         case .message(let message):
@@ -205,13 +232,11 @@ private final class PillView: NSView {
     override var fittingSize: NSSize {
         let textWidth: CGFloat
         switch state {
-        case .recording: textWidth = ("00:00" as NSString).size(withAttributes: Self.textAttributes).width
+        case .recording: return NSSize(width: 14 + 8 + 8 + bars.frame.width + 14, height: 38)
         case .transcribing: textWidth = ((String(localized: "Распознаю") + "...") as NSString).size(withAttributes: Self.textAttributes).width
         case .message: textWidth = (text as NSString).size(withAttributes: Self.textAttributes).width
         }
-        var width = 14 + 8 + 8 + textWidth + 14
-        if case .recording = state { width += 8 + bars.frame.width }
-        return NSSize(width: ceil(width), height: 38)
+        return NSSize(width: ceil(14 + 8 + 8 + textWidth + 14), height: 38)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -246,28 +271,51 @@ private final class PillView: NSView {
 /// The microphone level in the pill, drawn in the chosen `LevelStyle`.
 /// Bars: newest on the right; a flat white line until the first sound (asked 2026-10-26: dots,
 /// dim bars and bars filling in one by one all read as "wait, loading"), then bars to the end,
-/// the quiet ones short bars, not dots. Wave: 16 thin bars scrolling, like Voice Memos. Line: a
-/// smooth oscilloscope line that swings with the voice, redrawn 60 times a second while recording
-/// (at 30 it moved half as fast as the preview the owner chose, 2026-10-26).
+/// the quiet ones short bars, not dots. Wave: 28 thin bars scrolling, like Voice Memos. Line: a
+/// smooth oscilloscope line that swings with the voice. All three move 60 times a second while
+/// recording (the line at 30 moved half as fast as the preview the owner chose, 2026-10-26; bars
+/// and wave jumping 12 times a second, once per level, looked late and jerky next to the line,
+/// 2026-10-27): the bars and the wave glide left at a steady speed, the newest one on the right
+/// follows the voice at once. Since the timer was dropped (2026-10-27) they fill its place: 14 bars,
+/// 28 thin ones, a 75-point line, each moving as fast as before (points a second), so the longer
+/// row only shows more of the past.
+/// Every style is Core Animation layers: a bar is a `CALayer` whose frame changes, the line a
+/// `CAShapeLayer` whose path changes; the view itself never draws.
 private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
     static let lineHeight: CGFloat = 2
 
     private var style = LevelStyle.bars
-    private var levels: [CGFloat] = []
     private var heardSound = false
     private var smooth: CGFloat = 0
     private var target: CGFloat = 0
     private var phase: CGFloat = 0
     private var trace: [CGFloat] = []
+    /// Loudness 0…1 of the bars, oldest first: one more than fit, the newest coming in on the right.
+    private var columns: [CGFloat] = []
+    /// How far the bars have moved left since the last new one, 0 up to one spacing.
+    private var offset: CGFloat = 0
+    private var lastStep: CFTimeInterval = 0
     private var animation: Timer?
     private var lineLayer: CAShapeLayer?
+    private var barLayers: [CALayer] = []
+    private var flatLayer: CALayer?
+
+    private static let color = NSColor(white: 0.95, alpha: 1).cgColor
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 
     func reset(style: LevelStyle) {
         self.style = style
         setFrameSize(NSSize(width: style.width, height: Self.maxHeight))
-        levels = Array(repeating: 0, count: style.historyCount)
+        columns = Array(repeating: 0, count: style.historyCount + 1)
+        offset = 0
         trace = Array(repeating: 0, count: LevelStyle.traceCount)
         heardSound = false
         smooth = 0
@@ -275,31 +323,51 @@ private final class BarsView: NSView {
         stopAnimating()
         lineLayer?.removeFromSuperlayer()
         lineLayer = nil
-        if style == .line {
-            wantsLayer = true
+        barLayers.forEach { $0.removeFromSuperlayer() }
+        barLayers = []
+        flatLayer?.removeFromSuperlayer()
+        flatLayer = nil
+        switch style {
+        case .bars, .wave:
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            let radius: CGFloat = style == .bars ? 1.5 : 1
+            barLayers = columns.map { _ in
+                let bar = CALayer()
+                bar.backgroundColor = Self.color
+                bar.cornerRadius = radius
+                layer?.addSublayer(bar)
+                return bar
+            }
+            if style == .bars {
+                let flat = CALayer()
+                flat.backgroundColor = Self.color
+                flat.cornerRadius = Self.lineHeight / 2
+                flat.frame = CGRect(x: 0, y: bounds.height / 2 - Self.lineHeight / 2, width: bounds.width - 2, height: Self.lineHeight)
+                layer?.addSublayer(flat)
+                flatLayer = flat
+            }
+            CATransaction.commit()
+            updateBars()
+        case .line:
             let layer = CAShapeLayer()
             layer.frame = bounds
             layer.fillColor = nil
-            layer.strokeColor = NSColor(white: 0.95, alpha: 1).cgColor
+            layer.strokeColor = Self.color
             layer.lineWidth = 2
             layer.lineCap = .round
             layer.lineJoin = .round
             self.layer?.addSublayer(layer)
             lineLayer = layer
             updateLine()
-            startAnimating()
         }
-        needsDisplay = true
+        startAnimating()
     }
 
-    func push(_ level: CGFloat) {
-        let loudness = LevelBars.loudness(level)
+    /// How loud, 0…1 of the height (`LevelScale.loudness`).
+    func push(_ loudness: CGFloat) {
         if loudness > 0 { heardSound = true }
         target = loudness
-        guard !levels.isEmpty else { return }
-        levels.removeFirst()
-        levels.append(level)
-        if style != .line { needsDisplay = true }
     }
 
     func stopAnimating() {
@@ -308,6 +376,7 @@ private final class BarsView: NSView {
     }
 
     private func startAnimating() {
+        lastStep = CACurrentMediaTime()
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.step() }
         }
@@ -316,17 +385,38 @@ private final class BarsView: NSView {
         animation = timer
     }
 
-    /// One frame of the line: the shape layer gets a new path, which Core Animation draws, so the
-    /// view itself is never redrawn (that took ~9.5 % CPU at 60 fps). In silence, once the line is
-    /// flat, nothing changes and nothing is sent.
+    /// One frame: the layers get new frames or a new path, which Core Animation draws, so the view
+    /// itself is never redrawn (the line drawn in `draw(_:)` took ~9.5 % CPU at 60 fps). In
+    /// silence, once everything is flat, nothing changes and nothing is sent.
     private func step() {
-        smooth += (target - smooth) * 0.25
+        let now = CACurrentMediaTime()
+        let elapsed = CGFloat(min(0.05, now - lastStep))
+        lastStep = now
+        // The bars rise fast and fall a little slower, so syllables stay visible and a pause shows
+        // within ~0.1 s; the line keeps the smoothing it was chosen with.
+        let rate: CGFloat = style == .line ? 0.25 : (target > smooth ? 0.5 : 0.3)
+        smooth += (target - smooth) * rate
         if smooth < 0.001, target == 0 { smooth = 0 }
-        let flat = smooth == 0 && trace.allSatisfy { $0 == 0 }
-        phase += 0.12 + smooth * 0.3
-        trace.removeFirst()
-        trace.append(smooth)
-        if !flat { updateLine() }
+        switch style {
+        case .line:
+            let flat = smooth == 0 && trace.allSatisfy { $0 == 0 }
+            phase += 0.12 + smooth * 0.3
+            trace.removeFirst()
+            trace.append(smooth)
+            if !flat { updateLine() }
+        case .bars, .wave:
+            // Quiet bars still move on to the next place, so they stop evenly, none half faded.
+            let quiet = smooth == 0 && columns.allSatisfy { $0 == 0 }
+            if quiet, offset == 0 { return }
+            offset += style.speed * elapsed
+            while offset >= style.spacing {
+                offset = quiet ? 0 : offset - style.spacing
+                columns.removeFirst()
+                columns.append(smooth)
+            }
+            columns[columns.count - 1] = smooth
+            updateBars()
+        }
     }
 
     private func updateLine() {
@@ -343,38 +433,26 @@ private final class BarsView: NSView {
         CATransaction.commit()
     }
 
-    override func draw(_ dirtyRect: NSRect) {
+    /// New frames for the bars, actions off; Core Animation draws them. The oldest fades out on
+    /// the left while the newest fades in on the right.
+    /// Bars: the flat line until the first sound, then 3 pt bars 5 pt apart, at least 10 pt high.
+    /// Wave: 2 pt bars 3.5 pt apart, at least 2 pt.
+    private func updateBars() {
+        guard !barLayers.isEmpty else { return }
         let midY = bounds.height / 2
-        switch style {
-        case .bars: drawBars(midY: midY)
-        case .wave: drawWave(midY: midY)
-        case .line: break
+        let bars = style == .bars
+        let spacing = style.spacing
+        let last = columns.count - 1
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        flatLayer?.isHidden = heardSound
+        for (index, (bar, value)) in zip(barLayers, columns).enumerated() {
+            bar.isHidden = bars && !heardSound
+            let height = bars ? max(Self.quietHeight, value * Self.maxHeight) : max(2, value * (Self.maxHeight - 2))
+            bar.frame = CGRect(x: CGFloat(index) * spacing - offset, y: midY - height / 2, width: bars ? 3 : 2, height: height)
+            bar.opacity = index == 0 ? Float(1 - offset / spacing) : index == last ? Float(offset / spacing) : 1
         }
-    }
-
-    private func drawBars(midY: CGFloat) {
-        NSColor(white: 0.95, alpha: 1).setFill()
-        guard heardSound else {
-            NSBezierPath(roundedRect: NSRect(x: 0, y: midY - Self.lineHeight / 2, width: bounds.width - 2, height: Self.lineHeight),
-                         xRadius: Self.lineHeight / 2, yRadius: Self.lineHeight / 2).fill()
-            return
-        }
-        var x: CGFloat = 0
-        for level in levels {
-            let height = max(Self.quietHeight, LevelBars.loudness(level) * Self.maxHeight)
-            NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
-            x += 5
-        }
-    }
-
-    private func drawWave(midY: CGFloat) {
-        NSColor(white: 0.95, alpha: 1).setFill()
-        var x: CGFloat = 0
-        for level in levels {
-            let height = max(2, LevelBars.loudness(level) * (Self.maxHeight - 2))
-            NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 2, height: height), xRadius: 1, yRadius: 1).fill()
-            x += 3.5
-        }
+        CATransaction.commit()
     }
 }
 
@@ -382,7 +460,7 @@ private final class BarsView: NSView {
 enum LevelStyle: String, CaseIterable, Identifiable {
     case bars, wave, line
 
-    static let traceCount = 40
+    static let traceCount = 75
 
     var id: String { rawValue }
 
@@ -396,17 +474,24 @@ enum LevelStyle: String, CaseIterable, Identifiable {
 
     var historyCount: Int {
         switch self {
-        case .bars: 5
-        case .wave: 16
+        case .bars: 14
+        case .wave: 28
         case .line: 0
         }
     }
 
+    /// Points from one bar to the next.
+    var spacing: CGFloat { self == .bars ? 5 : 3.5 }
+
+    /// How fast the bars move left, points a second: 5 bars used to cross in 0.4 s, 16 thin ones in
+    /// ~0.65 s; now the rows are longer and take ~1.1 s.
+    var speed: CGFloat { self == .bars ? 62.5 : 86 }
+
     var width: CGFloat {
         switch self {
-        case .bars: 25
-        case .wave: 55
-        case .line: 54
+        case .bars: 70
+        case .wave: 98
+        case .line: 100
         }
     }
 
@@ -419,5 +504,49 @@ enum LevelStyle: String, CaseIterable, Identifiable {
 enum LevelBars {
     static func loudness(_ level: CGFloat) -> CGFloat {
         pow(max(0, min(1, (level - 0.02) / 0.38)), 0.7)
+    }
+}
+
+/// The level bars' scale, adapted to the microphone and the room (asked 2026-10-27: with AirPods,
+/// close to the mouth and with their own processing, nearly every word filled the bar on the
+/// fixed `LevelBars` scale, tuned on the MacBook microphone). Levels are 40 dB per 1.0
+/// (`AudioRecorder.level`). The bars show a 15 dB window (as `LevelBars`) hanging from the loud
+/// speech of the last seconds (`peak`: rises at once, sinks 0.4 dB a second while speaking, never in
+/// pauses, so the first word after a pause is not huge), cut at the background between words
+/// (`floor`: drops at once, rises 0.8 dB a second), never narrower than 8 dB, so a quiet room's
+/// hiss is not blown up. Only the pill uses it, the recording is untouched. Kept per microphone
+/// (`Prefs.levelScales`). Tuned on the owner's levels (`LevelScaleTests`): as recorded, 10 dB louder
+/// over room noise, and 4 dB quieter, the bars look alike (median ~0.7–0.8 of the height).
+struct LevelScale: Codable, Equatable {
+    var floor: CGFloat
+    var peak: CGFloat
+
+    /// The owner's voice on the MacBook microphone (silence 0): exactly `LevelBars` (0.02…0.40).
+    static let standard = LevelScale(floor: 0, peak: 0.45)
+
+    /// Just above the background is still silence (0.8 dB).
+    static let margin: CGFloat = 0.02
+    /// A bar is full this far below the peak (2 dB): the loudest syllables reach the top.
+    static let headroom: CGFloat = 0.05
+    /// From an empty to a full bar (15 dB), and never less than this (8 dB).
+    static let window: CGFloat = 0.38
+    static let minimumWindow: CGFloat = 0.2
+
+    mutating func update(_ level: CGFloat, elapsed: TimeInterval) {
+        let seconds = CGFloat(elapsed)
+        if level < floor { floor = level } else { floor = min(level, floor + 0.02 * seconds) }
+        if level > peak {
+            peak = level
+        } else if level > floor + Self.minimumWindow / 2 {
+            peak -= 0.01 * seconds
+        }
+        peak = max(peak, floor + Self.minimumWindow + Self.headroom)
+    }
+
+    /// 0…1 of the bar's height, with `LevelBars`' 0.7 curve.
+    func loudness(_ level: CGFloat) -> CGFloat {
+        let top = peak - Self.headroom
+        let low = max(floor + Self.margin, top - Self.window)
+        return pow(max(0, min(1, (level - low) / (top - low))), 0.7)
     }
 }

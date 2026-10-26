@@ -80,10 +80,11 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
   process that exits after a few idle minutes, so the model does not sit in memory.
 - **Cloud, optional**: Groq, OpenAI or any OpenAI-compatible `/audio/transcriptions` service with
   your own key (stored in the Keychain).
-- A small pill at the bottom of the screen with the microphone level, ё restored in the text,
+- A small pill at the bottom of the screen with the microphone level (its scale adapts to the
+  microphone and the room, and is remembered per microphone), ё restored in the text,
   history with search and statistics (words, words per minute, time saved).
 - **Telegram voice messages**: the newest voice messages from the official Telegram app's cache,
-  transcribed locally and kept for a few days.
+  transcribed locally and kept for a few days; copy or delete each text.
 
 ## Built for Apple Silicon
 
@@ -121,9 +122,9 @@ same scripts against both apps.
   simply exits (54 MB → 15–17 MB after a dictation).
 - Nothing polls except the clipboard (`changeCount` twice a second, as every clipboard manager
   does). Timers exist only while the dictation pill is on screen.
-- The recording pill is drawn by **Core Animation** layers: the 60 fps waveform builds one 40-point
-  path a frame (3.3% CPU, was 9.5% drawn by the view); WindowServer stays within ~1.5% of its
-  baseline.
+- The recording pill is drawn by **Core Animation** layers at 60 fps: each bar is a layer whose
+  frame changes, the line one path a frame; the view never redraws (~3% CPU, the line was 9.5%
+  drawn by the view); WindowServer stays within ~1.5% of its baseline.
 - Animation frames are raw pixels compressed with Apple's **LZFSE**, memory-mapped and decoded one
   at a time: 0.15 ms a frame against ~1 ms for PNG.
 - The ё dictionary (~107 000 words) is memory-mapped and binary-searched: no heap.

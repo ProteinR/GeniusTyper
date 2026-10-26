@@ -102,7 +102,7 @@ final class Dictation: ObservableObject {
             MainActor.assumeIsolated {
                 guard self.phase == .recording, self.startedAt == started else { return }
                 Sounds.play(.start)
-                Indicator.shared.show(.recording(since: started))
+                Indicator.shared.show(.recording(since: started), microphone: AudioRecorder.inputName)
             }
         }
         EngineStore.shared.prepare()

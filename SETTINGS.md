@@ -58,6 +58,7 @@ defaults write com.dmemruk.GeniusTyper autoOffApps -array-add com.sublimetext.4
 | `dictationSounds` | bool | `true` | Start and done sounds. |
 | `escCancels` | bool | `true` | Esc cancels a recording. |
 | `levelStyle` | string | `bars` | Microphone level in the pill: `bars`, `wave`, `line`. |
+| `levelScales` | data (JSON) | — | Learnt scale of the level bars per microphone name (`floor`, `peak`, in level units of 40 dB per 1.0); written when a dictation ends. Delete it to start over. |
 | `mascot` | string | `none` | Animation above the pill: `none`, `monkey`, `greyCat`, `wigCat`, `bruce`. |
 | `voicesEnabled` | bool | `true` | Telegram voice messages (inside dictation). |
 | `voicesShortcut` | data (JSON) | ⌃⌥V | Same format as `clipboardHotKey`. |

@@ -128,7 +128,8 @@ final class AudioRecorder {
         return Array(UnsafeBufferPointer(start: output.floatChannelData![0], count: Int(output.frameLength)))
     }
 
-    private static var inputName: String {
+    /// The default input, which the engine records from (the level scale is kept per name).
+    static var inputName: String {
         AVCaptureDevice.default(for: .audio)?.localizedName ?? "default input"
     }
 }

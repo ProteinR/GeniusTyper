@@ -158,11 +158,12 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   `~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3`, started automatically on
   first launch). The first load ever compiles the model for the Neural Engine (one-time, >10 s;
   cached by macOS in `~/Library/Caches/com.apple.e5rt.e5bundlecache`, survives rebuilds).
-- **Paste** (`Paster`): text to the clipboard marked `org.nspasteboard.TransientType` (the clipboard history skips it), ⌘V posted, previous clipboard restored after 0.6 s unless
-  something else was copied. Needs Accessibility (the key taps need it too); without it the text
+- **Paste** (`Paster`): text to the clipboard marked `org.nspasteboard.TransientType` (the clipboard history skips it), ⌘V posted, previous clipboard restored 0.5 s after the app
+  read the text (a data provider hands it over on request; 5 s if nobody asks) unless something
+  else was copied. A fixed 0.6 s pasted the old clipboard when the app was busy (2026-10-27). Needs Accessibility (the key taps need it too); without it the text
   stays on the clipboard and the pill says so.
 - **Indicator** (`Indicator`): TypeWhisper's "Overlay" + "Classic": dark pill at the bottom centre
-  of the screen with the pointer: red dot, timer, 5 level bars up to 30 pt (pill 38 pt high; `LevelBars`: 0.02…0.40
+  of the screen with the pointer: red dot and 14 level bars up to 30 pt (no timer since 2026-10-27: the bars took its place) (pill 38 pt high; `LevelBars`: 0.02…0.40
   onto the height with a 0.7 power curve, tuned on the owner's recorded voice
   (silence 0.00, speech mostly 0.15–0.36, peaks ~0.47; only its levels are kept, in
   `Tests/GeniusTyperTests/Fixtures/owner-speech-levels.txt`, the public repository has no voice;
@@ -172,12 +173,28 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   read as "not hearing"; both seen on recorded dictations) (asked 2026-10-26: 3 pt dots, dim bars and bars
   filling in one by one all read as "wait, loading"); "Распознаю…"; short messages
   (no model, no key, nothing recognised). AppKit-drawn `NSPanel`, built on show, released on hide.
+  **Adaptive scale** (`LevelScale`, asked 2026-10-27: with AirPods nearly every word filled the
+  bar): the bars show a 15 dB window hanging 2 dB below the loud speech of the last seconds (peak:
+  up at once, down 0.4 dB/s while speaking, frozen in pauses), cut at the background (down at once,
+  up 0.8 dB/s), at least 8 dB wide; the mascot's "loud" is on the same scale. Learnt per microphone
+  (input name) and kept in `levelScales` when a dictation with ≥1 s of speech ends, so the next one
+  starts calibrated; the demo and `--indicator-test` use `LevelScale.standard` (= `LevelBars`) and
+  keep nothing. `LevelScaleTests`: the owner's levels as recorded, 10 dB louder over noise and 4 dB
+  quieter give alike bars (median 0.6–0.85, ≤12 % at the top; the fixed scale put 48 % of the
+  louder ones at the top). The log has "Level scale for <mic>" after each dictation.
   **Level style** (`LevelStyle`, Диктовка → Индикатор, asked 2026-10-26 after an interactive
-  preview of six): "Полоски" (above, default), "Плотная волна" (16 thin bars scrolling, a dotted
+  preview of six): "Полоски" (above, default), "Плотная волна" (28 thin bars scrolling, a dotted
   line in silence, like Voice Memos) and "Линия" (a smooth oscilloscope line that swings with the
   voice; its own 60 fps timer only while recording, the speed of the preview; a `CAShapeLayer`
-  gets a new path each frame and the view is never redrawn: ~3.3 % CPU then against ~2.3 % for
-  the bars, ~9.5 % when it was drawn in `draw(_:)`; stopped on hide; `DICTATION-PROFILING.md`). The demo
+  gets a new path each frame and the view is never redrawn: ~3 % CPU, ~9.5 % when it was drawn in
+  `draw(_:)`; stopped on hide). The bars and the wave are one `CALayer` per bar, no `draw(_:)`
+  either, and since 2026-10-27 move on the same 60 fps timer (asked: jumping once per level, 12
+  times a second, the wave looked late and jerky next to the line, and a pause showed only after
+  ~1 s): they glide left at a steady speed (62.5 / 86 pt a second; the wave
+  used to take 1.3 s for 16 bars), the newest on the right follows a smoothed level (fast rise, a pause shows in ~0.2 s),
+  the oldest fades out on the left, the newest fades in; in silence they move on to an even place
+  and stop. ~3 % CPU like the line (~1.2 % when they jumped, ~2.3 % drawn;
+  `DICTATION-PROFILING.md`). The demo
   ("Показать", `--indicator-demo`) uses the owner's levels.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
   `--indicator-demo`): a monkey, one of two cats or Bruce Almighty above the pill while recording/transcribing,
@@ -198,7 +215,8 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   and switches to the fast loop after 3 s of speech; a pause over 1.5 s starts slow again.
 - **History** (`History`, SQLite `~/Library/Application Support/GeniusTyper/dictation/history.sqlite`): text
   only (no audio), forever: date, text, words, duration, app, model. Paged from disk, Cyrillic
-  case-insensitive search (`lower_ru`), copy, delete.
+  case-insensitive search (`lower_ru`), copy, delete. The left-click panel's column: a click on a
+  row copies and closes the panel, the copy button beside it copies and stays (2026-10-27).
 - **Statistics**: week / month / all time: words, dictations, words per minute, time saved (typing
   at 45 wpm minus speaking time — TypeWhisper's figure), words per day, by app, by model; all
   totals computed by SQLite.
@@ -220,7 +238,13 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   (non-voice files are remembered for the run, so their headers are read once), they join the list
   in their place and are transcribed newest first. A quiet status beside the title: "Проверяю новые
   голосовые…" → "Расшифровываю: N" → "Все голосовые расшифрованы". Older ones on request, 3 at a
-  time, as above. The format before 0.13.0 (`key` + `text`) is read and converted. Nothing goes into the dictation history or statistics (the owner wants only own dictation there). The chat a file came from is only in Telegram's encrypted database, so the
+  time, as above. One stored text per file **path** (the id of the document is in the name):
+  Telegram sometimes touches a file again, and keying by path + date transcribed it twice
+  (2026-10-27; duplicates are merged on load, `VoiceText.unique`). The bin beside the copy button
+  deletes a text (not while it is transcribed); the file stays remembered as `deleted` without
+  text, so it is not transcribed again. The list scrolls to a new page only after "more" (scrolling
+  on every new item jumped to the bottom when new voices were found on opening). The format before
+  0.13.0 (`key` + `text`) is read and converted. Nothing goes into the dictation history or statistics (the owner wants only own dictation there). The chat a file came from is only in Telegram's encrypted database, so the
   owner keeps voice auto-download on for private chats only (Telegram → Data and Storage). Video
   circles (mp4) are not included. `-voicesRoot <folder>` points it at a test folder; `--voices`
   opens the popup at launch. The owner declined importing TypeWhisper's history (2026-10-26).

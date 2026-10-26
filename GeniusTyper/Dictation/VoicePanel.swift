@@ -208,10 +208,10 @@ struct VoicesView: View {
             .onScrollGeometryChange(for: Bool.self, of: { geometry in
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 8
             }, action: { _, end in more.atEnd = end })
-            // A new page: bring its first item into view.
-            .onChange(of: model.items.count) { old, new in
-                guard old > 0, new > old else { return }
-                withAnimation { proxy.scrollTo(model.items[old].id, anchor: .top) }
+            // A page from "more": bring its first item into view.
+            .onChange(of: model.newPage) { _, id in
+                guard let id else { return }
+                withAnimation { proxy.scrollTo(id, anchor: .top) }
             }
         }
     }
@@ -261,6 +261,11 @@ private struct VoiceRow: View {
                         .buttonStyle(.borderless)
                         .help("Скопировать")
                 }
+                if deletable {
+                    Button { VoiceTranscripts.shared.delete(item) } label: { Image(systemName: "trash") }
+                        .buttonStyle(.borderless)
+                        .help("Удалить расшифровку")
+                }
             }
             switch item.text {
             case .waiting:
@@ -278,6 +283,14 @@ private struct VoiceRow: View {
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
             }
+        }
+    }
+
+    /// Not while it waits or is transcribed: the result would bring it back.
+    private var deletable: Bool {
+        switch item.text {
+        case .done, .failed: true
+        case .waiting, .transcribing: false
         }
     }
 

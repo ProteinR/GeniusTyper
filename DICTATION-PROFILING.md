@@ -116,3 +116,40 @@ What is left of an animation's cost: LZFSE decoding, and Core Animation converti
 from sRGB to the screen's colours (vImage, ~40 % of it). Tagging the frames with the screen's
 colour space would remove that, but colours would be slightly off on the P3 built-in screen; kept
 correct. WindowServer's own CPU could not be measured: it was at ~42 % from the rest of the screen.
+
+**0.14.0: the bars and the wave on layers (2026-10-27).** Each bar is a `CALayer` (background
+colour, corner radius) whose frame is set when a level arrives, actions off, so the bars jump as
+before; the flat line before the first sound is one more layer. The view has no `draw(_:)` left at
+all, for any style. Same look (screenshots of the demo). `--indicator-test`, one run before, two
+after (WindowServer ~44–45 % with or without the pill, within the resolution of `ps`):
+
+| | App CPU before (drawn) | After (layers) |
+|---|---|---|
+| Полоски | 2.2 % | **1.1–1.4 %** |
+| Плотная волна | 2.3–2.4 % | **1.2–1.8 %** |
+| Линия (unchanged) | 2.9 % | 2.8–3.1 % |
+| Полоски + monkey | 4.3 % | 3.4–3.9 % |
+| Полоски + grey cat | 3.8–3.9 % | 2.8–3.0 % |
+| Полоски + cat in a wig | 3.9–4.0 % | 3.1–3.4 % |
+| Полоски + Bruce | 5.0 % | 3.9–4.8 % (one 7.2 % while the machine was busy) |
+| Footprint | 23.7–25.5 MB | 23.3–25.7 MB |
+
+Drawing 5 rounded rectangles 12 times a second was cheap, but each redraw also meant AppKit
+display passes and a new backing image for the view; setting a few layer frames costs about half.
+
+**Same day: bars and wave glide at 60 fps.** The owner found the wave late and jerky next to the
+line (a pause showed only after ~1 s). Now they move on the line's 60 fps timer: a steady glide,
+the newest bar following a smoothed level, the wave crossing in ~0.65 s instead of 1.3 s; frozen
+once quiet and evenly placed. The cost is the line's:
+
+| | Jumping, 12/s (layers) | Gliding, 60 fps |
+|---|---|---|
+| Полоски | 1.1–1.4 % | 2.6–3.0 % |
+| Плотная волна | 1.2–1.8 % | 2.9–3.2 % |
+| Линия (unchanged) | 2.8–3.1 % | 2.8–3.0 % |
+| Полоски + animations | 2.8–4.8 % | 4.4–7.3 % |
+
+Footprint 23.8–26.3 MB, not growing between rounds.
+
+**No timer in the pill (2026-10-27).** The clock is gone and the level row took its place (14
+bars, 28 thin ones, a 75-point line); the pill no longer redraws twice a second while recording.

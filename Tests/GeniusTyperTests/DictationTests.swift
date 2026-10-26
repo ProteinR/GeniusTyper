@@ -200,7 +200,7 @@ final class TelegramVoicesTests: XCTestCase {
         try put("telegram-cloud-photo", Data([0xFF, 0xD8, 0xFF, 0xE0] + [UInt8](repeating: 0, count: 100)), age: 5)
         let candidates = TelegramVoices.candidates(in: root)
         let stored = candidates.first { $0.url.lastPathComponent.hasSuffix("stored") }!
-        let known: Set = [VoiceText.key(path: stored.url.path, date: stored.date)]
+        let known: Set = [stored.url.path]
         let since = Date().addingTimeInterval(-7 * 86_400)
 
         let first = TelegramVoices.scan(candidates, since: since, known: known, notVoices: [])
@@ -231,6 +231,17 @@ final class TelegramVoicesTests: XCTestCase {
         XCTAssertEqual(migrated[0].date.timeIntervalSince1970, 1_792_000_000.123456, accuracy: 0.001)
         XCTAssertEqual(migrated[0].text, "привет")
         XCTAssertEqual(migrated[0].key, VoiceText.key(path: "/media/telegram-cloud-document-1", date: Date(timeIntervalSince1970: 1_792_000_000.123456)))
+    }
+
+    func testOneStoredTextPerFile() {
+        let day = Date(timeIntervalSince1970: 1_792_000_000)
+        let first = VoiceText(path: "/a", date: day, duration: 47, text: "первая", added: day)
+        let touched = VoiceText(path: "/a", date: day.addingTimeInterval(10), duration: 47, text: "вторая", added: day.addingTimeInterval(400))
+        let other = VoiceText(path: "/b", date: day, duration: 3, text: "другое", added: day)
+        XCTAssertEqual(VoiceText.unique([first, other, touched]), [other, touched])
+        let deleted = VoiceText(path: "/a", date: day, duration: 47, text: "", added: day.addingTimeInterval(100), deleted: true)
+        XCTAssertEqual(VoiceText.unique([first, deleted, touched]), [deleted])
+        XCTAssertEqual(VoiceText.decode(try! JSONEncoder().encode([deleted, other])), [deleted, other])
     }
 
     func testDecodesToSixteenKilohertz() throws {
@@ -267,5 +278,78 @@ final class LevelBarsTests: XCTestCase {
         let speech = try ownerLevels().filter { $0 >= 0.1 }.map(LevelBars.loudness)
         XCTAssertEqual(speech.max(), 1)
         XCTAssertLessThan(Double(speech.filter { $0 >= 1 }.count) / Double(speech.count), 0.1)
+    }
+}
+
+final class LevelScaleTests: XCTestCase {
+    private func ownerLevels() throws -> [CGFloat] {
+        let url = Bundle(for: Self.self).url(forResource: "owner-speech-levels", withExtension: "txt")!
+        return try String(contentsOf: url, encoding: .utf8).split(separator: "\n").compactMap { Double($0) }.map { CGFloat($0) }
+    }
+
+    /// Runs the levels (12 a second) through `scale` and returns the bar heights.
+    private func heights(_ levels: [CGFloat], _ scale: inout LevelScale) -> [CGFloat] {
+        levels.map { level in
+            scale.update(level, elapsed: 1.0 / 12)
+            return scale.loudness(level)
+        }
+    }
+
+    /// Median and share at the top of the bars that show something.
+    private func shape(_ heights: [CGFloat]) -> (median: CGFloat, full: Double) {
+        let shown = heights.filter { $0 > 0.05 }.sorted()
+        return (shown[shown.count / 2], Double(shown.filter { $0 >= 1 }.count) / Double(shown.count))
+    }
+
+    func testStandardIsTheFixedScale() {
+        for level in stride(from: CGFloat(0), through: 0.6, by: 0.01) {
+            XCTAssertEqual(LevelScale.standard.loudness(level), LevelBars.loudness(level), accuracy: 0.001)
+        }
+    }
+
+    /// As recorded, 10 dB louder over room noise (AirPods), 4 dB quieter: once the scale has
+    /// learnt the microphone (one pass), the bars look alike, and silence stays flat.
+    func testBarsLookAlikeOnLouderAndQuieterMicrophones() throws {
+        let own = try ownerLevels()
+        let cases: [(String, [CGFloat])] = [
+            ("as recorded", own),
+            ("louder, room noise", own.map { $0 > 0 ? $0 + 0.25 : 0.1 }),
+            ("quieter", own.map { $0 > 0 ? max(0, $0 - 0.1) : 0 }),
+        ]
+        for (name, levels) in cases {
+            var scale = LevelScale.standard
+            _ = heights(levels, &scale)
+            let bars = heights(levels, &scale)
+            let (median, full) = shape(bars)
+            XCTAssertGreaterThan(median, 0.6, name)
+            XCTAssertLessThan(median, 0.85, name)
+            XCTAssertLessThanOrEqual(full, 0.12, name)
+            let silence = zip(own, bars).filter { $0.0 == 0 }.map(\.1)
+            XCTAssertTrue(silence.allSatisfy { $0 == 0 }, name)
+        }
+        // The fixed scale on the louder microphone: mostly at the top.
+        XCTAssertGreaterThan(shape(cases[1].1.map(LevelBars.loudness)).full, 0.4)
+    }
+
+    /// A pause does not lower the scale: the next word is not blown up.
+    func testPausesKeepTheScale() {
+        var scale = LevelScale(floor: 0.1, peak: 0.7)
+        for _ in 0..<120 { scale.update(0.1, elapsed: 1.0 / 12) }
+        XCTAssertEqual(scale.peak, 0.7, accuracy: 0.001)
+        XCTAssertEqual(scale.loudness(0.1), 0)
+    }
+
+    /// A noisy room raises the floor; its hiss shows no bars.
+    func testNoiseIsFlat() {
+        var scale = LevelScale.standard
+        for _ in 0..<(12 * 20) { scale.update(0.25, elapsed: 1.0 / 12) }
+        XCTAssertEqual(scale.floor, 0.25, accuracy: 0.001)
+        XCTAssertEqual(scale.loudness(0.25), 0)
+        XCTAssertGreaterThan(scale.loudness(0.45), 0.5)
+    }
+
+    func testStoredAsJSON() throws {
+        let scales = ["AirPods": LevelScale(floor: 0.1, peak: 0.7)]
+        XCTAssertEqual(try JSONDecoder().decode([String: LevelScale].self, from: JSONEncoder().encode(scales)), scales)
     }
 }

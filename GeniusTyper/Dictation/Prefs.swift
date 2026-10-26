@@ -60,6 +60,13 @@ enum Prefs {
         set { defaults.set(newValue, forKey: "levelStyle") }
     }
 
+    /// The level bars' scale per microphone (`LevelScale`, by the input's name), learnt while
+    /// dictating: a new dictation starts where the last one with that microphone ended.
+    static var levelScales: [String: LevelScale] {
+        get { defaults.data(forKey: "levelScales").flatMap { try? JSONDecoder().decode([String: LevelScale].self, from: $0) } ?? [:] }
+        set { defaults.set(try? JSONEncoder().encode(newValue), forKey: "levelScales") }
+    }
+
     /// The character above the pill while dictating (`Mascot` raw value).
     static var mascot: String {
         get { defaults.string(forKey: "mascot") ?? Mascot.none.rawValue }

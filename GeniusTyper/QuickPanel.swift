@@ -371,19 +371,30 @@ private struct HistoryRow: View {
     let entry: HistoryEntry
     let action: () -> Void
     @State private var hovered = false
+    @State private var copied = false
 
     var body: some View {
-        Button(action: action) {
+        HStack(alignment: .top, spacing: 6) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(meta).font(.caption).foregroundStyle(.secondary)
                 Text(entry.text).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 6).fill(hovered ? Color.primary.opacity(0.1) : .clear))
-            .contentShape(Rectangle())
+            // Copies and stays open (a click on the row copies and closes the panel).
+            Button {
+                copy(entry.text)
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+            } label: {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .help("Скопировать")
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 6).fill(hovered ? Color.primary.opacity(0.1) : .clear))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
         .onHover { hovered = $0 }
         .help("Нажмите, чтобы скопировать")
     }
