@@ -182,6 +182,14 @@ final class TelegramVoicesTests: XCTestCase {
         XCTAssertEqual(found.map(\.url.lastPathComponent), ["telegram-cloud-document-new", "telegram-cloud-document-done", "telegram-cloud-document-old"])
         XCTAssertEqual(found[0].duration, 2.5, accuracy: 2.0)
         XCTAssertEqual(TelegramVoices.latest(limit: 1, in: root).count, 1)
+
+        // Pages: the next call continues after the last file looked at, photos skipped.
+        let candidates = TelegramVoices.candidates(in: root)
+        let first = TelegramVoices.voices(in: candidates, from: 0, limit: 2)
+        XCTAssertEqual(first.files.map(\.url.lastPathComponent), ["telegram-cloud-document-new", "telegram-cloud-document-done"])
+        let second = TelegramVoices.voices(in: candidates, from: first.next, limit: 2)
+        XCTAssertEqual(second.files.map(\.url.lastPathComponent), ["telegram-cloud-document-old"])
+        XCTAssertEqual(second.next, candidates.count)
     }
 
     func testDecodesToSixteenKilohertz() throws {

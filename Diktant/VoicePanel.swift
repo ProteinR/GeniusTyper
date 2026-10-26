@@ -4,7 +4,8 @@ import SwiftUI
 
 /// The "Голосовые из Telegram" popup: the latest voice messages and their text, in a small panel
 /// near the top centre of the screen with the pointer. Built on show and released on close; Esc,
-/// a click elsewhere or the hot key again closes it. Does not take the focus from Telegram.
+/// a click elsewhere or the hot key again closes it. Does not take the focus from Telegram. Scrolling
+/// on past the end, ↓ at the end or the "Ещё" button adds the next few older ones.
 @MainActor
 final class VoicePanel {
     static let shared = VoicePanel()
@@ -13,6 +14,8 @@ final class VoicePanel {
     private var host: NSHostingView<VoicesView>?
     private var monitors: [Any] = []
     private var changes: AnyCancellable?
+    /// The end of the list is on screen (set by the view), so scrolling down means "more".
+    private var atEnd = true
 
     var isShown: Bool { panel != nil }
 
@@ -40,7 +43,10 @@ final class VoicePanel {
     }
 
     private func build() {
-        let host = NSHostingView(rootView: VoicesView(close: { [weak self] in self?.close() }))
+        let host = NSHostingView(rootView: VoicesView(
+            close: { [weak self] in self?.close() },
+            atEnd: { [weak self] in self?.atEnd = $0 },
+            resized: { [weak self] in self?.fit(anchorTop: true) }))
         let size = host.fittingSize
         let panel = Panel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel],
                           backing: .buffered, defer: false)
@@ -88,7 +94,8 @@ final class VoicePanel {
         panel.setFrame(NSRect(x: (visible.midX - size.width / 2).rounded(), y: top - size.height, width: size.width, height: size.height), display: true)
     }
 
-    /// A click anywhere else or Esc closes it, like a menu.
+    /// A click anywhere else or Esc closes it, like a menu. Scrolling down at the end of the list or
+    /// ↓ there loads more (momentum after a flick does not count, so one flick adds one page).
     private func watchForClose() {
         guard monitors.isEmpty else { return }
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
@@ -97,9 +104,18 @@ final class VoicePanel {
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.keyDown], handler: { [weak self] event in
             MainActor.assumeIsolated {
                 if event.keyCode == 53 { self?.close(); return nil } // Esc
+                if event.keyCode == 125, self?.atEnd == true { VoiceTranscripts.shared.loadMore(); return nil } // ↓
                 return event
             }
         }) { monitors.append(local) }
+        if let scroll = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel], handler: { [weak self] event in
+            MainActor.assumeIsolated {
+                if event.scrollingDeltaY < 0, event.momentumPhase.isEmpty, self?.atEnd == true {
+                    VoiceTranscripts.shared.loadMore()
+                }
+                return event
+            }
+        }) { monitors.append(scroll) }
     }
 
     private final class Panel: NSPanel {
@@ -109,8 +125,14 @@ final class VoicePanel {
 
 struct VoicesView: View {
     let close: () -> Void
+    let atEnd: (Bool) -> Void
+    let resized: () -> Void
     @ObservedObject private var model = VoiceTranscripts.shared
     @State private var expanded: String?
+    @State private var listHeight: CGFloat = 0
+
+    /// Taller than this, the list scrolls.
+    private let maxListHeight: CGFloat = 520
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -122,7 +144,7 @@ struct VoicesView: View {
                     .buttonStyle(.plain)
                     .help("Закрыть (Esc)")
             }
-            if model.isLoading {
+            if model.isLoading && model.items.isEmpty {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)
                     Text("Ищу голосовые…").foregroundStyle(.secondary)
@@ -131,18 +153,62 @@ struct VoicesView: View {
             if let problem = model.problem {
                 Text(problem).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
-                if index > 0 { Divider() }
-                VoiceRow(item: item, expanded: index == 0 || expanded == item.id) {
-                    expanded = expanded == item.id ? nil : item.id
-                }
-            }
-            Text("Новое сверху · \(HotkeyMonitor.shared.voicesShortcut.title)")
+            if !model.items.isEmpty { list }
+            Text(model.hasMore
+                 ? "Новое сверху · ещё — прокрутите вниз или ↓ · \(HotkeyMonitor.shared.voicesShortcut.title)"
+                 : "Новое сверху · \(HotkeyMonitor.shared.voicesShortcut.title)")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
         .padding(14)
         .frame(width: 460)
+    }
+
+    private var list: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 { Divider() }
+                        VoiceRow(item: item, expanded: index == 0 || expanded == item.id) {
+                            expanded = expanded == item.id ? nil : item.id
+                        }
+                        .id(item.id)
+                    }
+                    if model.hasMore || model.isLoading {
+                        Button { model.loadMore() } label: {
+                            HStack(spacing: 6) {
+                                if model.isLoading {
+                                    ProgressView().controlSize(.small)
+                                    Text("Ищу ещё…")
+                                } else {
+                                    Image(systemName: "chevron.down")
+                                    Text("Ещё \(VoiceTranscripts.pageSize)")
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(model.isLoading)
+                    }
+                }
+            }
+            .scrollIndicators(.automatic)
+            .frame(height: min(listHeight, maxListHeight))
+            .onScrollGeometryChange(for: CGFloat.self, of: \.contentSize.height) { _, height in
+                listHeight = height
+                DispatchQueue.main.async(execute: resized)
+            }
+            .onScrollGeometryChange(for: Bool.self, of: { geometry in
+                geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 8
+            }, action: { _, end in atEnd(end) })
+            // A new page: bring its first item into view.
+            .onChange(of: model.items.count) { old, new in
+                guard old > 0, new > old else { return }
+                withAnimation { proxy.scrollTo(model.items[old].id, anchor: .top) }
+            }
+        }
     }
 }
 
