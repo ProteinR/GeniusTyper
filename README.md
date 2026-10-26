@@ -29,7 +29,7 @@ Each part has its own switch; turn off what you do not need.
 ## Why Genius Typer
 
 - **Three apps in one, lighter than any of them**: 23 MB of memory at rest for layout switching,
-  clipboard history and dictation together; Maccy alone took 353–505 MB on the same Mac.
+  clipboard history and dictation together.
 - **Zero background cost**: 0 CPU wake-ups per second at rest (Maccy: ~100/s), so it does not
   touch your battery life.
 - **Offline speech recognition on the Neural Engine**: 10 seconds of speech becomes text in
@@ -97,9 +97,12 @@ app's own `--…-test` modes; memory is the footprint Activity Monitor shows. De
 | Idle: CPU, wake-ups | **0.03%, 0/s** | Maccy 0.03%, ~100/s |
 | Copying text once a second | **0.95% CPU** | Maccy 17.3% |
 | Copying an 800×600 image every 2 s | **1.5% CPU, 37 MB** | Maccy 12.6%, 546 MB |
-| Clipboard history on disk | ~2 MB for 70 entries | Maccy 568 MB for 50 |
 | Dictating | ~17 MB + model helper ~36 MB, gone after idle | TypeWhisper keeps the model loaded |
 | Leaks after 3 stress rounds | none of ours (`leaks`), footprint flat | — |
+
+Maccy was measured as it was used, not as a clean install: version 2.7.1 after four days of
+running with a real history, so its memory figures depend on that history. The copying rows ran the
+same scripts against both apps.
 
 **Local dictation** (NVIDIA Parakeet TDT 0.6B v3, CoreML on the Neural Engine):
 
