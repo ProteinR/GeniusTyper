@@ -22,16 +22,22 @@ struct DictationPage: View {
             Section("Запись") {
                 ShortcutRow(kind: .dictation)
                 Toggle(isOn: $escCancels) {
-                    Text("Esc отменяет запись")
-                    Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Esc отменяет запись")
+                        Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Toggle(isOn: $sounds) {
-                    Text("Звуки")
-                    Text("Начало записи, вставка текста, ошибка").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Звуки")
+                        Text("Начало записи, вставка текста, ошибка").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Toggle(isOn: $yo) {
-                    Text("Ставить ё в надиктованном")
-                    Text("Модель почти всегда пишет «е»: «еще» → «ещё», как при наборе").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ставить ё в надиктованном")
+                        Text("Модель почти всегда пишет «е»: «еще» → «ещё», как при наборе").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 LabeledContent {
                     HStack(spacing: 6) {
@@ -55,9 +61,11 @@ struct DictationPage: View {
                 .active(enabled)
             Section {
                 Toggle(isOn: Binding(get: { voices }, set: { voices = $0; HotkeyMonitor.shared.installVoices() })) {
-                    Text("Голосовые из Telegram")
-                    Text("Расшифровка последних голосовых: в панели по клику на значок и по сочетанию клавиш")
-                        .font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Голосовые из Telegram")
+                        Text("Расшифровка последних голосовых: в панели по клику на значок и по сочетанию клавиш")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 ShortcutRow(kind: .voices)
                     .active(voices)

@@ -133,7 +133,7 @@ struct SettingsView: View {
                     .padding(.horizontal, 8)
             }
             .padding(10)
-            .frame(width: 180)
+            .frame(width: 200)
             .background(Color.primary.opacity(0.04))
             Divider()
             Group {

@@ -13,9 +13,11 @@ struct GeneralPage: View {
             Section("Система") {
                 LoginItemToggle()
                 Toggle(isOn: $icon.isShown) {
-                    Text("Значок в строке меню")
-                    Text("Без значка всё продолжает работать; настройки открываются повторным запуском из Spotlight или Finder")
-                        .font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Значок в строке меню")
+                        Text("Без значка всё продолжает работать; настройки открываются повторным запуском из Spotlight или Finder")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 LabeledContent {
                     Menu {
@@ -32,8 +34,10 @@ struct GeneralPage: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle(isOn: $icon.showsSymbol) {
-                    Text("Язык рядом с иконкой")
-                    Text("Выключено — на значке только язык, крупно").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Язык рядом с иконкой")
+                        Text("Выключено — на значке только язык, крупно").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 .active(icon.languageMark != .none)
             }
@@ -90,13 +94,17 @@ struct TypingPage: View {
             }
             Section {
                 Toggle(isOn: $observer.autoFix) {
-                    Text("Исправлять раскладку")
-                    Text("«ghbdtn» → «привет»: слово, набранное не в той раскладке, перепечатывается после пробела")
-                        .font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Исправлять раскладку")
+                        Text("«ghbdtn» → «привет»: слово, набранное не в той раскладке, перепечатывается после пробела")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Toggle(isOn: $observer.yoFix) {
-                    Text("Ставить ё")
-                    Text("«еще» → «ещё», только где ё точно нужна (не в «все», «узнаем»)").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ставить ё")
+                        Text("«еще» → «ещё», только где ё точно нужна (не в «все», «узнаем»)").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 LabeledContent {
                     Button("Изменить…") { ExceptionsEditor.show(.apps) }
@@ -118,8 +126,10 @@ struct TypingPage: View {
             .active(!observer.paused)
             Section {
                 Toggle(isOn: $observer.capsLockSwitching) {
-                    Text("Переключать раскладку клавишей Caps Lock")
-                    Text("Одно нажатие — другой язык. Заглавные буквы — ⇧ + Caps Lock").font(.caption).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Переключать раскладку клавишей Caps Lock")
+                        Text("Одно нажатие — другой язык. Заглавные буквы — ⇧ + Caps Lock").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             } header: {
                 Text("Caps Lock")
