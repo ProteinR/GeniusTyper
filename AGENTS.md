@@ -163,8 +163,9 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
 - **Indicator** (`Indicator`): TypeWhisper's "Overlay" + "Classic": dark pill at the bottom centre
   of the screen with the pointer: red dot, timer, 5 level bars up to 30 pt (pill 38 pt high; the MacBook
   microphone gives ~0.3–0.7 for speech, so the bars map 0.1…0.7 onto the height with a 0.7 power
-  curve, at least 6 pt while there is sound so quiet bars never look like dots); in silence a flat
-  white line that is there from the first frame (asked 2026-10-26: 3 pt dots, dim bars and bars
+  curve; once a bar is over 14 pt the line gives way to bars, the quiet ones 10 pt so they never
+  look like dots, checked on a recorded dictation); otherwise a flat white line, there from the
+  first frame (asked 2026-10-26: 3 pt dots, dim bars and bars
   filling in one by one all read as "wait, loading"); "Распознаю…"; short messages
   (no model, no key, nothing recognised). AppKit-drawn `NSPanel`, built on show, released on hide.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also

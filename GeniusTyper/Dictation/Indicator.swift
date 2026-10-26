@@ -243,7 +243,8 @@ private final class PillView: NSView {
 /// as "wait, loading"); with sound the line goes and the quiet bars stay short bars, not dots.
 private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
-    static let quietHeight: CGFloat = 6
+    static let quietHeight: CGFloat = 10
+    static let soundHeight: CGFloat = 14
     static let lineHeight: CGFloat = 2
 
     private var levels = Array(repeating: CGFloat(0), count: PillView.barCount)
@@ -269,7 +270,7 @@ private final class BarsView: NSView {
         NSColor(white: 0.95, alpha: 1).setFill()
         let midY = bounds.height / 2
         let loudness = levels.map(Self.loudness)
-        guard loudness.contains(where: { $0 * Self.maxHeight > Self.quietHeight }) else {
+        guard loudness.contains(where: { $0 * Self.maxHeight > Self.soundHeight }) else {
             NSBezierPath(roundedRect: NSRect(x: 0, y: midY - Self.lineHeight / 2, width: bounds.width - 2, height: Self.lineHeight),
                          xRadius: Self.lineHeight / 2, yRadius: Self.lineHeight / 2).fill()
             return
