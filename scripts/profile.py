@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measures running processes the same way, for before/after and Genius Switcher vs Maccy.
+"""Measures running processes the same way, for before/after and Genius Typer vs Maccy.
 
 Usage: python3 scripts/profile.py <seconds> <label> <process name substring>...
 

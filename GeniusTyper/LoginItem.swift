@@ -1,7 +1,7 @@
 import ServiceManagement
 import SwiftUI
 
-/// "Запускать при входе": registers Genius Switcher as a login item, so observing continues after a
+/// "Запускать при входе": registers Genius Typer as a login item, so observing continues after a
 /// restart without opening the app by hand.
 @MainActor
 final class LoginItem: ObservableObject {
@@ -58,9 +58,9 @@ struct LoginItemToggle: View {
         VStack(alignment: .leading, spacing: 2) {
             Toggle("Запуск при входе", isOn: Binding(get: { item.isEnabled || item.needsApproval },
                                                                    set: { item.set($0) }))
-                .help("Запускать Genius Switcher при входе в систему, чтобы наблюдение шло и после перезагрузки")
+                .help("Запускать Genius Typer при входе в систему, чтобы наблюдение шло и после перезагрузки")
             if item.needsApproval {
-                Button("Разрешите Genius Switcher в настройках «Объекты входа»") { item.openSettings() }
+                Button("Разрешите Genius Typer в настройках «Объекты входа»") { item.openSettings() }
                     .buttonStyle(.link)
                     .font(.caption)
             }

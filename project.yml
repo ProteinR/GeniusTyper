@@ -1,4 +1,4 @@
-name: GeniusSwitcher
+name: GeniusTyper
 options:
   bundleIdPrefix: com.dmemruk
   developmentLanguage: ru
@@ -17,15 +17,15 @@ settings:
     ENABLE_HARDENED_RUNTIME: NO
     MACOSX_DEPLOYMENT_TARGET: "15.0"
 targets:
-  GeniusSwitcher:
+  GeniusTyper:
     type: application
     platform: macOS
     sources:
-      - GeniusSwitcher
+      - GeniusTyper
     info:
-      path: GeniusSwitcher/Info.plist
+      path: GeniusTyper/Info.plist
       properties:
-        CFBundleDisplayName: Genius Switcher
+        CFBundleDisplayName: Genius Typer
         CFBundleDevelopmentRegion: ru
         CFBundleLocalizations: [ru]
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -35,26 +35,26 @@ targets:
         LSUIElement: true
     settings:
       base:
-        # The app is "Genius Switcher.app"; the module and folder have no space.
-        PRODUCT_NAME: Genius Switcher
-        PRODUCT_MODULE_NAME: GeniusSwitcher
-        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.GeniusSwitcher
+        # The app is "Genius Typer.app"; the module and folder have no space.
+        PRODUCT_NAME: Genius Typer
+        PRODUCT_MODULE_NAME: GeniusTyper
+        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.GeniusTyper
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     scheme:
       testTargets:
-        - GeniusSwitcherTests
+        - GeniusTyperTests
   # Unit tests of the pure logic: word tracking, rewrites and the detector.
-  GeniusSwitcherTests:
+  GeniusTyperTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - Tests/GeniusSwitcherTests
+      - Tests/GeniusTyperTests
     dependencies:
-      - target: GeniusSwitcher
+      - target: GeniusTyper
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.GeniusSwitcherTests
-        # The app is "Genius Switcher.app" (PRODUCT_NAME); xcodegen would point at GeniusSwitcher.app.
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Genius Switcher.app/Contents/MacOS/Genius Switcher"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.GeniusTyperTests
+        # The app is "Genius Typer.app" (PRODUCT_NAME); xcodegen would point at GeniusTyper.app.
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Genius Typer.app/Contents/MacOS/Genius Typer"
         BUNDLE_LOADER: "$(TEST_HOST)"
         GENERATE_INFOPLIST_FILE: YES

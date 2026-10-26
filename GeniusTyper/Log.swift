@@ -2,10 +2,10 @@ import Foundation
 import os
 
 /// Detailed logging to two places:
-/// - `~/Library/Logs/GeniusSwitcher/geniusswitcher.log` (plain text, rotated at 5 MB, kept as `geniusswitcher.1.log`),
+/// - `~/Library/Logs/GeniusTyper/geniustyper.log` (plain text, rotated at 5 MB, kept as `geniustyper.1.log`),
 ///   easy to read, attach or `tail -f`;
-/// - the unified system log, subsystem `com.dmemruk.GeniusSwitcher`
-///   (`log stream --predicate 'subsystem == "com.dmemruk.GeniusSwitcher"'`).
+/// - the unified system log, subsystem `com.dmemruk.GeniusTyper`
+///   (`log stream --predicate 'subsystem == "com.dmemruk.GeniusTyper"'`).
 enum Log {
     enum Level: String {
         case debug = "DEBUG", info = "INFO", warning = "WARN", error = "ERROR"
@@ -14,16 +14,16 @@ enum Log {
     static let fileURL: URL = {
         // Unit tests log to a temporary folder, not into the real recording log.
         let dir = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            ? FileManager.default.temporaryDirectory.appendingPathComponent("GeniusSwitcherTests", isDirectory: true)
+            ? FileManager.default.temporaryDirectory.appendingPathComponent("GeniusTyperTests", isDirectory: true)
             : FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("Logs/GeniusSwitcher", isDirectory: true)
+                .appendingPathComponent("Logs/GeniusTyper", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("geniusswitcher.log")
+        return dir.appendingPathComponent("geniustyper.log")
     }()
 
     private static let maxFileSize = 5 * 1024 * 1024
-    private static let queue = DispatchQueue(label: "com.dmemruk.GeniusSwitcher.log")
-    private static let osLog = Logger(subsystem: "com.dmemruk.GeniusSwitcher", category: "app")
+    private static let queue = DispatchQueue(label: "com.dmemruk.GeniusTyper.log")
+    private static let osLog = Logger(subsystem: "com.dmemruk.GeniusTyper", category: "app")
     private static let timestamp: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -68,7 +68,7 @@ enum Log {
         let manager = FileManager.default
         let path = fileURL.path
         if let size = (try? manager.attributesOfItem(atPath: path))?[.size] as? Int, size > maxFileSize {
-            let rotated = fileURL.deletingLastPathComponent().appendingPathComponent("geniusswitcher.1.log")
+            let rotated = fileURL.deletingLastPathComponent().appendingPathComponent("geniustyper.1.log")
             try? manager.removeItem(at: rotated)
             try? manager.moveItem(at: fileURL, to: rotated)
         }

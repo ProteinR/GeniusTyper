@@ -1,5 +1,5 @@
 import XCTest
-@testable import GeniusSwitcher
+@testable import GeniusTyper
 
 /// Enough of ABC / RussianWin for "ghbdtn" = "привет" and a few punctuation keys.
 private struct FakeLayouts: LayoutRendering {

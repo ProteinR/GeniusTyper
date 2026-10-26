@@ -9,7 +9,7 @@ struct MenuView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Genius Switcher").font(.headline)
+                Text("Genius Typer").font(.headline)
                 Text(AppDelegate.appVersion)
                     .font(.caption).foregroundStyle(.tertiary)
                     .textSelection(.enabled)
@@ -20,7 +20,7 @@ struct MenuView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Нет доступа к «Мониторингу ввода»", systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                    Text("Без него Genius Switcher не видит нажатий и Caps Lock не переключает раскладку.")
+                    Text("Без него Genius Typer не видит нажатий и Caps Lock не переключает раскладку.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Открыть настройки…") { observer.requestPermission() }

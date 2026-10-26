@@ -1,7 +1,7 @@
-# Genius Switcher: agent guide
+# Genius Typer: agent guide
 
-GitHub: ProteinR/GeniusSwitcher (private, since 2026-10-26). App `~/Applications/Genius Switcher.app`, bundle ID `com.dmemruk.GeniusSwitcher`, module and folder
-`GeniusSwitcher` (renamed from "Switcher" on 2026-10-18; journal and settings were moved over).
+GitHub: ProteinR/GeniusTyper (private, since 2026-10-26). App `~/Applications/Genius Typer.app`, bundle ID `com.dmemruk.GeniusTyper`, module and folder
+`GeniusTyper` (renamed from "Switcher" on 2026-10-18; journal and settings were moved over).
 
 Personal macOS menu bar app replacing **Caramba Switcher** (automatic RU/EN layout fixing). It
 fixes words typed in the wrong layout and keeps a text-free journal of how the owner types and
@@ -30,14 +30,14 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   after a fix (no key in between, 5 s) undoes it. Undo, or ⇧+Space twice for the same word
   (`SkipCounter`, memory only), shows `ExceptionSuggestion`: a non-activating panel in the top right
   ("«rtl» — в исключения?", hides after 8 s, never takes the focus). Off by default in terminals and
-  code editors. Genius Switcher's own events carry a marker and are ignored by the tap.
+  code editors. Genius Typer's own events carry a marker and are ignored by the tap.
 - **ё** (`Yoficator.swift`, as Caramba's "Ёфикатор"; panel "Ставить ё", on by default): after a
   space or punctuation a Russian word typed with е where ё is always right gets it ("еще" → "ещё",
   "Артем" → "Артём", "ЕЩЕ" → "ЕЩЁ"); also in words the auto-fix turns into Russian. Only the letters
   from the first ё on are retyped. Words with both spellings (все/всё, узнаем/узнаём) are never
   touched. Same rules as the auto-fix: not after Enter, ⇧+Space keeps the word, Caps Lock right
   after puts е back (journal `yoFix` / `yoUndo`) and offers the exceptions (a word there is never
-  given ё), off in "Не исправлять в" apps. Dictionary `GeniusSwitcher/yo.txt`: eyo-kernel's
+  given ё), off in "Не исправлять в" apps. Dictionary `GeniusTyper/yo.txt`: eyo-kernel's
   `dictionary/safe.txt` (MIT, github.com/hcodes/eyo-kernel, licence in `yo-LICENSE.txt`) expanded
   by `scripts/make-yo-dictionary.py` into ~107 000 sorted forms; memory-mapped and binary-searched,
   no heap. To update: download a newer `safe.txt`, run the script, run the tests.
@@ -57,7 +57,7 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
   deletes. Polls `changeCount` every 0.5 s. Keeps text (+ RTF/HTML), images (TIFF saved as PNG) and
   files, same content moves to the top; limit in MB (panel: 50/100/200/500, default 100) plus 1000
   entries. Skips password managers, "Не следить в" apps, nspasteboard.org private/transient types
-  and seed phrases (Maccy's regex). Stored in `~/Library/Application Support/GeniusSwitcher/clipboard/`
+  and seed phrases (Maccy's regex). Stored in `~/Library/Application Support/GeniusTyper/clipboard/`
   (`index.json` with texts + one folder per entry). Measured against Maccy: `MACCY-BASELINE.md`.
   The shortcut is changeable in the panel ("Открывать": click, press a combination with ⌘/⌥/⌃;
   `KeyCombo`, stored as `clipboardHotKey`). As in Maccy, the gear at the bottom right of the
@@ -69,7 +69,7 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
 - `WordTracker.swift` (pure, tested): keys → finished words and *rewrites* (erase, then retype).
   Words are kept as physical keys, so "ghbdtn" and "привет" are the same keys in two layouts.
   The layout of each key is the selected input source at that moment. Not the character in the
-  event: after Genius Switcher switches the layout itself, events keep carrying characters of the old
+  event: after Genius Typer switches the layout itself, events keep carrying characters of the old
   layout while the app types in the new one (2026-10-18: "hello" typed in Russian was judged English).
 - `Detector.swift`: detector v0: macOS spell checking in both layouts plus a script
   check (the Russian checker accepts Latin "ok"/"git"). All-caps words of 2–5 letters (RTL, API)
@@ -88,7 +88,7 @@ Icon: `scripts/make-icon.swift`: the "Genius" meme face (`scripts/genius.png`) i
 
 The clipboard history is the exception: it stores what was copied (that is its job), locally only.
 The second exception, asked for by the owner on 2026-10-26: the **words log**
-(`~/Library/Application Support/GeniusSwitcher/words/YYYY-MM-DD.jsonl`, `WordLogEntry`, 30 days):
+(`~/Library/Application Support/GeniusTyper/words/YYYY-MM-DD.jsonl`, `WordLogEntry`, 30 days):
 only fixes with their words: auto-fix, its undo, ⇧+Space skip, Caps Lock mid-word, Caps Lock twice,
 ё, manual wrong-layout fixes (`rewrite`) and detector false alarms (`flagKept`), each as `typed` →
 `result`. Plain typing is never written, nor anything in the "Не исправлять в" apps (terminals,
@@ -100,8 +100,8 @@ The journal never contains text: only layouts, lengths, verdicts, timings and th
 a word is typed; the menu shows the last 5 fixes as text from memory only. Password managers are
 excluded by default, plus "Не следить в «…»" per app. Secure Input fields are invisible to the tap.
 
-Journal: `~/Library/Application Support/GeniusSwitcher/journal/YYYY-MM-DD.jsonl`, 90 days.
-Log: `~/Library/Logs/GeniusSwitcher/geniusswitcher.log`.
+Journal: `~/Library/Application Support/GeniusTyper/journal/YYYY-MM-DD.jsonl`, 90 days.
+Log: `~/Library/Logs/GeniusTyper/geniustyper.log`.
 
 ## Next
 
@@ -126,18 +126,18 @@ load. Results and lessons: `MACCY-BASELINE.md`. Keep high-frequency state (`Typi
 Build and install: `scripts/install.sh`. Tests: `scripts/test.sh` (also removes the Debug app afterwards: a second copy with the same bundle ID steals the permissions).
 Both delete `build/` when done (~300 MB of intermediates and caches); `KEEP_BUILD=1` keeps it while
 iterating. **When finished, leave no extra copies or caches behind**: only
-`~/Applications/Genius Switcher.app` (`mdfind "kMDItemCFBundleIdentifier == 'com.dmemruk.GeniusSwitcher'"`
+`~/Applications/Genius Typer.app` (`mdfind "kMDItemCFBundleIdentifier == 'com.dmemruk.GeniusTyper'"`
 shows one result), no `build/`, no DerivedData, and delete test screenshots (they show the clipboard).
 
 ## Menu bar icon
 
-`StatusItemController.swift` (the same file in Genius Switcher and MonitorCtl): left click = panel,
+`StatusItemController.swift` (the same file in Genius Typer and MonitorCtl): left click = panel,
 right click = menu with "Завершить". Not SwiftUI's `MenuBarExtra`: when the icon is turned off in
 System Settings → Menu Bar, a `MenuBarExtra`-only app quits right after launch (MonitorCtl did, so
 its keys silently stopped working, and the unit tests' host quit too). With an `NSStatusItem` the
 app keeps running; opening it again from Spotlight/Finder shows the panel in a small window.
 
-Genius Switcher's icon is drawn in code (`AppDelegate.menuBarImage`): "G" with a text cursor (it
+Genius Typer's icon is drawn in code (`AppDelegate.menuBarImage`): "G" with a text cursor (it
 was SF Symbols' "A" with a cursor). Panel "Язык на значке: нет / RU / EN / флаг" + "с иконкой"
 (`MenuBarIcon.LanguageMark`, `showsSymbol`): with the icon the language is small at its right
 (text ~10.5 pt in the image; a flag is a 14 pt title, emoji flags look smaller than text), without

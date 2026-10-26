@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds GeniusSwitcher/yo.txt from eyo-kernel's safe dictionary (MIT, github.com/hcodes/eyo-kernel).
+"""Builds GeniusTyper/yo.txt from eyo-kernel's safe dictionary (MIT, github.com/hcodes/eyo-kernel).
 
 Only "safe" words: where ё is always right (еще → ещё, Артем → Артём). Words where both spellings
 exist (все/всё, узнаем/узнаём) are in eyo's not_safe.txt and are left out on purpose.
@@ -34,6 +34,6 @@ for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
         if "ё" in form or "Ё" in form:
             forms.setdefault(key(form), form + ("*" if lowercase_only else ""))
 
-out = Path(__file__).resolve().parent.parent / "GeniusSwitcher" / "yo.txt"
+out = Path(__file__).resolve().parent.parent / "GeniusTyper" / "yo.txt"
 out.write_text("\n".join(forms[k] for k in sorted(forms)) + "\n", encoding="utf-8")
 print(f"{len(forms)} forms → {out}")

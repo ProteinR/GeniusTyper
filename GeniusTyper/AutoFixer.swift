@@ -5,7 +5,7 @@ import Foundation
 /// Types on the user's behalf: erases the word just typed and types it in the other layout.
 /// Needs the Accessibility permission (posting keyboard events).
 enum KeyPoster {
-    /// Marks Genius Switcher's own events, so its key tap ignores them.
+    /// Marks Genius Typer's own events, so its key tap ignores them.
     static let marker: Int64 = 0x5357_4954  // "SWIT"
 
     static var canPost: Bool { CGPreflightPostEventAccess() }

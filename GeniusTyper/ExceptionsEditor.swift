@@ -78,7 +78,7 @@ private struct WordsTab: View {
                     Button("Сбросить") { observer.clearExceptions() }.font(.caption)
                 }
             }
-            Text("Хранится только в настройках Genius Switcher, в журнал не попадает.")
+            Text("Хранится только в настройках Genius Typer, в журнал не попадает.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(8)

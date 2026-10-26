@@ -5,7 +5,7 @@ import CryptoKit
 /// to a size limit in MB, and puts an entry back on the pasteboard to paste it.
 ///
 /// Unlike the journal, the history holds the copied content itself: that is its purpose. It never
-/// leaves the Mac: `~/Library/Application Support/GeniusSwitcher/clipboard/`, readable only by the
+/// leaves the Mac: `~/Library/Application Support/GeniusTyper/clipboard/`, readable only by the
 /// user. Copies from password managers, "do not watch" apps and private pasteboard types are skipped.
 @MainActor
 final class ClipboardStore: ObservableObject {

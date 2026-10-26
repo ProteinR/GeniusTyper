@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct GeniusSwitcherApp: App {
+struct GeniusTyperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Genius Switcher"
+        image.accessibilityDescription = "Genius Typer"
         return image
     }()
 
@@ -56,10 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !Self.isRunningTests else { return }
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        Log.info("Genius Switcher \(Self.appVersion) (\(build)) started")
+        Log.info("Genius Typer \(Self.appVersion) (\(build)) started")
         Self.shared = self
         statusItem = StatusItemController(
-            image: Self.menuBarImage, title: "Genius Switcher",
+            image: Self.menuBarImage, title: "Genius Typer",
             content: { AnyView(MenuView().environmentObject(Observer.shared)) },
             menuItems: { [weak self] in self?.contextMenuItems() ?? [] })
         Observer.shared.start()
@@ -126,7 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationWillTerminate(_ notification: Notification) {
         guard !Self.isRunningTests else { return }
-        // Caps Lock goes back to normal when Genius Switcher is not running.
+        // Caps Lock goes back to normal when Genius Typer is not running.
         Observer.shared.stop()
         ClipboardStore.shared.flush()
     }

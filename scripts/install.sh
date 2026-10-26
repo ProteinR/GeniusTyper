@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build Genius Switcher (ad-hoc signed) and install it to ~/Applications.
+# Build Genius Typer (ad-hoc signed) and install it to ~/Applications.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-APP="Genius Switcher"
+APP="Genius Typer"
 PRODUCT="build/dd/Build/Products/Release/$APP.app"
 xcodegen generate -q
-xcodebuild -project GeniusSwitcher.xcodeproj -scheme GeniusSwitcher -configuration Release \
+xcodebuild -project GeniusTyper.xcodeproj -scheme GeniusTyper -configuration Release \
   -derivedDataPath build/dd build -quiet
 # Re-sign with the stable local certificate (the one MeetRec uses). Its designated requirement is the
 # certificate, not the build hash, so the Input Monitoring permission survives rebuilds.
@@ -23,7 +23,7 @@ else
 fi
 # Quit gracefully; kill only if it does not quit in time.
 if pgrep -qx "$APP"; then
-  osascript -e 'tell application id "com.dmemruk.GeniusSwitcher" to quit' >/dev/null 2>&1 || true
+  osascript -e 'tell application id "com.dmemruk.GeniusTyper" to quit' >/dev/null 2>&1 || true
 fi
 for _ in $(seq 1 50); do pgrep -qx "$APP" || break; sleep 0.2; done
 pkill -x "$APP" 2>/dev/null || true

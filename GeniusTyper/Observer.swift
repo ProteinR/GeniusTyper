@@ -10,7 +10,7 @@ final class Observer: ObservableObject {
     @Published private(set) var hasPermission = CGPreflightListenEventAccess()
     /// Changes with every word: watched only by the statistics window, not by the panel.
     let typing = TypingStats()
-    /// The app typed in last (not Genius Switcher itself), for "do not watch in …".
+    /// The app typed in last (not Genius Typer itself), for "do not watch in …".
     @Published private(set) var lastApp: (id: String, name: String)?
 
     @Published var paused: Bool {
@@ -49,7 +49,7 @@ final class Observer: ObservableObject {
         didSet { UserDefaults.standard.set(wordLog, forKey: "wordLog") }
     }
 
-    /// Accessibility: Genius Switcher may type (needed for auto-fix only).
+    /// Accessibility: Genius Typer may type (needed for auto-fix only).
     @Published private(set) var canPost = KeyPoster.canPost
 
     /// Apps where auto-fix is off (the journal still runs there).
@@ -85,7 +85,7 @@ final class Observer: ObservableObject {
     private var currentApp: String?
     private var lastKeyTime: TimeInterval = 0
     private var knownLanguage: String?
-    /// When Genius Switcher itself switched the layout (Caps Lock), to tell its switches from others.
+    /// When Genius Typer itself switched the layout (Caps Lock), to tell its switches from others.
     private var capsSwitchTime: TimeInterval = 0
     private var statsDay = Journal.file(for: Date()).lastPathComponent
     private var autoSwitchTime: TimeInterval = 0
@@ -298,7 +298,7 @@ final class Observer: ObservableObject {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return
         }
-        // Genius Switcher's own typing (auto-fix, undo).
+        // Genius Typer's own typing (auto-fix, undo).
         if event.getIntegerValueField(.eventSourceUserData) == KeyPoster.marker { return }
         guard type == .keyDown else {
             lastFix = nil

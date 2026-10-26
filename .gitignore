@@ -1,4 +1,4 @@
 build/
 *.xcodeproj/
-GeniusSwitcher/Info.plist
+GeniusTyper/Info.plist
 .DS_Store

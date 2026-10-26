@@ -5,7 +5,7 @@ import Foundation
 struct JournalEntry: Codable, Equatable {
     enum Kind: String, Codable {
         case word, rewrite, flagKept, start, pause, resume
-        /// Genius Switcher fixed a word itself / the user undid that with Caps Lock.
+        /// Genius Typer fixed a word itself / the user undid that with Caps Lock.
         case autoFix, autoUndo
         /// A word the auto-fixer would fix, ended with ⇧+Space: the user kept it on purpose.
         case autoSkip
@@ -46,7 +46,7 @@ struct JournalEntry: Codable, Equatable {
     var noticeSec: Double?
 
     // switch
-    /// caps (Caps Lock in Genius Switcher) / auto (auto-fix) / other (macOS shortcut, menu, Fn…)
+    /// caps (Caps Lock in Genius Typer) / auto (auto-fix) / other (macOS shortcut, menu, Fn…)
     var method: String?
     /// wordStart / midWord / afterErase
     var context: String?
@@ -137,13 +137,13 @@ struct WordLogEntry: Codable, Equatable {
     var verdict: Verdict?
 }
 
-/// `~/Library/Application Support/GeniusSwitcher/journal/YYYY-MM-DD.jsonl`, one JSON object per line,
+/// `~/Library/Application Support/GeniusTyper/journal/YYYY-MM-DD.jsonl`, one JSON object per line,
 /// kept for 90 days; fixes with their words in `words/`, kept for 30 days.
 final class Journal {
     static let base: URL = AppDelegate.isRunningTests
-        ? FileManager.default.temporaryDirectory.appendingPathComponent("GeniusSwitcherTests", isDirectory: true)
+        ? FileManager.default.temporaryDirectory.appendingPathComponent("GeniusTyperTests", isDirectory: true)
         : FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("GeniusSwitcher", isDirectory: true)
+            .appendingPathComponent("GeniusTyper", isDirectory: true)
     static let directory = folder("journal")
     static let wordsDirectory = folder("words")
     static let wordsDays = 30
@@ -154,7 +154,7 @@ final class Journal {
         return dir
     }
 
-    private let queue = DispatchQueue(label: "com.dmemruk.GeniusSwitcher.journal")
+    private let queue = DispatchQueue(label: "com.dmemruk.GeniusTyper.journal")
     private let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
