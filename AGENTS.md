@@ -1,7 +1,7 @@
 # Genius Typer: agent guide
 
-GitHub: ProteinR/GeniusTyper (was ProteinR/GeniusSwitcher; prepared for a public repository on
-2026-10-26: README.md / README.ru.md, SETTINGS.md, MIT `LICENSE`). App `~/Applications/Genius Typer.app`,
+GitHub: ProteinR/GeniusTyper, public since 2026-10-27 (was ProteinR/GeniusSwitcher; README.md /
+README.ru.md, SETTINGS.md, MIT `LICENSE`). App `~/Applications/Genius Typer.app`,
 bundle ID `com.dmemruk.GeniusTyper`, module and folder `GeniusTyper`.
 
 Personal macOS menu bar app for everything about typing text: **Genius Switcher** (RU/EN layout
