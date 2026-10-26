@@ -238,30 +238,33 @@ private final class PillView: NSView {
     }
 }
 
-/// The microphone level bars, newest on the right. In silence they are a flat white line, there
-/// from the first frame (asked 2026-10-26: dots, dim bars and bars filling in one by one all read
-/// as "wait, loading"); with sound the line goes and the quiet bars stay short bars, not dots.
+/// The microphone level bars, newest on the right. Until the first sound they are a flat white
+/// line, there from the first frame (asked 2026-10-26: dots, dim bars and bars filling in one by
+/// one all read as "wait, loading"); from the first sound on they stay bars to the end, the quiet
+/// ones short bars, not dots and not the line again (the line came back while speaking softly).
 private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
-    static let soundHeight: CGFloat = 14
     static let lineHeight: CGFloat = 2
 
     private var levels = Array(repeating: CGFloat(0), count: PillView.barCount)
+    private var heardSound = false
 
     func reset() {
         levels = Array(repeating: 0, count: PillView.barCount)
+        heardSound = false
         needsDisplay = true
     }
 
     func push(_ level: CGFloat) {
         levels.removeFirst()
         levels.append(level)
+        if Self.loudness(level) > 0 { heardSound = true }
         needsDisplay = true
     }
 
     /// 0…1 of the height. The owner's MacBook microphone gives about 0.3–0.7 for speech (recorded
-    /// 2026-10-26): room noise under 0.1 stays flat, loud speech reaches the top.
+    /// 2026-10-26): room noise under 0.1 is 0, loud speech reaches the top.
     private static func loudness(_ level: CGFloat) -> CGFloat {
         pow(max(0, min(1, (level - 0.1) / 0.6)), 0.7)
     }
@@ -269,15 +272,14 @@ private final class BarsView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         NSColor(white: 0.95, alpha: 1).setFill()
         let midY = bounds.height / 2
-        let loudness = levels.map(Self.loudness)
-        guard loudness.contains(where: { $0 * Self.maxHeight > Self.soundHeight }) else {
+        guard heardSound else {
             NSBezierPath(roundedRect: NSRect(x: 0, y: midY - Self.lineHeight / 2, width: bounds.width - 2, height: Self.lineHeight),
                          xRadius: Self.lineHeight / 2, yRadius: Self.lineHeight / 2).fill()
             return
         }
         var x: CGFloat = 0
-        for value in loudness {
-            let height = max(Self.quietHeight, value * Self.maxHeight)
+        for level in levels {
+            let height = max(Self.quietHeight, Self.loudness(level) * Self.maxHeight)
             NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 3, height: height), xRadius: 1.5, yRadius: 1.5).fill()
             x += 5
         }
