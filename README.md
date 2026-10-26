@@ -93,11 +93,11 @@ app's own `--…-test` modes; memory is the footprint Activity Monitor shows. De
 
 | | Genius Typer | Replaced apps |
 |---|---|---|
-| Idle: memory | **23 MB** (all three parts) | Maccy 353–505 MB, TypeWhisper ~113 MB + 30 MB widget |
+| Idle: memory | **23 MB** (all three parts) | Maccy 353–505 MB, TypeWhisper ~113 MB + 30 MB widget (cloud engine selected, no local model) |
 | Idle: CPU, wake-ups | **0.03%, 0/s** | Maccy 0.03%, ~100/s |
 | Copying text once a second | **0.95% CPU** | Maccy 17.3% |
 | Copying an 800×600 image every 2 s | **1.5% CPU, 37 MB** | Maccy 12.6%, 546 MB |
-| Dictating | ~17 MB + model helper ~36 MB, gone after idle | TypeWhisper keeps the model loaded |
+| Dictating | ~17 MB + model helper ~36 MB, gone after idle | — |
 | Leaks after 3 stress rounds | none of ours (`leaks`), footprint flat | — |
 
 Maccy was measured as it was used, not as a clean install: version 2.7.1 after four days of
