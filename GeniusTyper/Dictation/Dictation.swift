@@ -171,19 +171,25 @@ final class Dictation: ObservableObject {
     }
 }
 
-/// Short sounds (switch "Звуки"): start, text pasted (a soft ding of our own,
-/// `scripts/make-sounds.swift`), failure (nothing recognised, error, no paste), Esc.
+/// Short sounds (switch "Звуки"): start (a Funk-like bass blip of our own), text pasted (a soft
+/// ding of our own; both from `scripts/make-sounds.swift`), failure (nothing recognised, error,
+/// no paste), Esc.
 enum Sounds {
     enum Kind { case start, success, failure, cancel }
 
-    private static let success = Bundle.main.url(forResource: "success", withExtension: "wav")
-        .flatMap { NSSound(contentsOf: $0, byReference: true) }
+    private static let start = own("start")
+    private static let success = own("success")
+
+    private static func own(_ name: String) -> NSSound? {
+        Bundle.main.url(forResource: name, withExtension: "wav")
+            .flatMap { NSSound(contentsOf: $0, byReference: true) }
+    }
 
     static func play(_ kind: Kind) {
         guard Prefs.sounds else { return }
         let sound: NSSound?
         switch kind {
-        case .start: sound = NSSound(named: "Tink")
+        case .start: sound = start
         case .success: sound = success
         case .failure: sound = NSSound(named: "Pop")
         case .cancel: sound = NSSound(named: "Funk")

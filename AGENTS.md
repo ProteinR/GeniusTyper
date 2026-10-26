@@ -226,7 +226,8 @@ Dictation checks: - `scripts/test.sh` also runs these unit tests (hybrid key, sh
 - - `PROFILE=1 scripts/install.sh`: signs with get-task-allow for `heap`/`leaks`/`vmmap`.
 - Log: `~/Library/Logs/GeniusTyper/geniustyper.log` (debug lines with `verboseLog` or any `--…-test`).
 
-Sounds: start = system Tink, text pasted = own single soft
+Sounds: start = own two short bass notes up a fourth (165 → 220 Hz) `GeniusTyper/Dictation/Sounds/start.wav`
+(like system Funk, which the owner likes, but rising; Tink was too thin; chosen over a single gliding or flat note), text pasted = own single soft
 sine tap at 740 Hz `GeniusTyper/Dictation/Sounds/success.wav` (`scripts/make-sounds.swift`, in the spirit of
 Claude's voice-mode sounds; a brighter C6 bell with overtones was too sharp for the owner, and
 system Pop sounded like a failure, so Pop now means nothing recognised / error), Esc = Funk.

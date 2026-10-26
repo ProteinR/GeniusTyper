@@ -1,11 +1,15 @@
-// Writes Diktant's own sounds as 16-bit mono WAV.
+// Writes the dictation's own sounds as 16-bit mono WAV.
 // success.wav: text pasted. In the spirit of Claude's voice-mode sounds (soft, almost pure sine
 // taps, 650–950 Hz) rather than a bell: the first own "ding" (C6 with overtones) was too sharp.
-// Usage: swift scripts/make-sounds.swift <dir> [variant]   variant: tap (default, the one in use) | rise
+// start.wav: recording starts. The owner liked the system Funk (Esc) and found Tink too thin, so
+// it is Funk-like bass (Funk: ~160 Hz with its 2nd harmonic, ~0.25 s), but rising: two notes.
+// Usage: swift scripts/make-sounds.swift <dir> [variant] [start]
+//   variant: tap (default, the one in use) | rise;  start: two (default, chosen by the owner 2026-10-26) | up | low
 import Foundation
 
 let outDir = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let variant = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "tap"
+let startVariant = CommandLine.arguments.count > 3 ? CommandLine.arguments[3] : "two"
 try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
 let rate = 44_100.0
 
@@ -57,3 +61,37 @@ default:
 }
 try wav(success).write(to: outDir.appendingPathComponent("success.wav"))
 print("Wrote success.wav (\(variant))")
+
+/// A warm bass blip like Funk: the pitch glides from `from` to `to` over `glide` seconds, the
+/// 2nd and 3rd harmonics fade faster than the fundamental (a closing low-pass), soft ends.
+func bwop(from: Double, to: Double, glide: Double, length: Double, decay: Double) -> [Double] {
+    let count = Int(length * rate)
+    var phase = 0.0
+    return (0..<count).map { i in
+        let t = Double(i) / rate
+        let k = min(1, t / glide)
+        let frequency = from + (to - from) * (1 - (1 - k) * (1 - k))
+        phase += 2 * .pi * frequency / rate
+        let attack = t < 0.008 ? 0.5 - 0.5 * cos(.pi * t / 0.008) : 1
+        let release = min(1, (length - t) / 0.03)
+        let bright = exp(-t / (decay * 0.5))
+        let tone = sin(phase) + 0.55 * bright * sin(2 * phase) + 0.2 * bright * sin(3 * phase)
+        return attack * release * exp(-t / decay) * tone
+    }
+}
+
+let start: [Double]
+switch startVariant {
+case "up":
+    // One note gliding up 150 → 225 Hz: Funk's colour, but rising instead of falling.
+    start = mix([(0, bwop(from: 150, to: 225, glide: 0.07, length: 0.24, decay: 0.07))], level: 0.3)
+case "low":
+    // One Funk-like note a fourth higher than Funk, no glide.
+    start = mix([(0, bwop(from: 220, to: 220, glide: 0.01, length: 0.24, decay: 0.07))], level: 0.3)
+default:
+    // Two short bass notes up a fourth (165 → 220 Hz): "go" (chosen by the owner).
+    start = mix([(0, bwop(from: 165, to: 165, glide: 0.01, length: 0.12, decay: 0.04)),
+                 (0.08, bwop(from: 220, to: 220, glide: 0.01, length: 0.2, decay: 0.06))], level: 0.3)
+}
+try wav(start).write(to: outDir.appendingPathComponent("start.wav"))
+print("Wrote start.wav (\(startVariant))")
