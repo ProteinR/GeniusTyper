@@ -4,8 +4,10 @@ import SwiftUI
 
 /// The "Голосовые из Telegram" popup: the latest voice messages and their text, in a small panel
 /// near the top centre of the screen with the pointer. Built on show and released on close; Esc,
-/// a click elsewhere or the hot key again closes it. Does not take the focus from Telegram. Scrolling
-/// on past the end, ↓ at the end or the "Ещё" button adds the next few older ones.
+/// a click elsewhere or the hot key again closes it. Does not take the focus from Telegram. The
+/// stored texts of the last days show at once; a quiet status beside the title tells while new
+/// voice messages are looked for and transcribed. Scrolling on past the end, ↓ at the end or the
+/// "Ещё" button adds the next few older ones.
 @MainActor
 final class VoicePanel {
     static let shared = VoicePanel()
@@ -127,15 +129,10 @@ struct VoicesView: View {
                 Image(systemName: "waveform").foregroundStyle(.secondary)
                 Text("Голосовые из Telegram").font(.headline)
                 Spacer()
+                status
                 Button(action: close) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                     .buttonStyle(.plain)
                     .help("Закрыть (Esc)")
-            }
-            if model.isLoading && model.items.isEmpty {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Ищу голосовые…").foregroundStyle(.secondary)
-                }
             }
             if let problem = model.problem {
                 Text(problem).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -151,6 +148,25 @@ struct VoicesView: View {
         .frame(width: 460)
         .onAppear(perform: more.start)
         .onDisappear(perform: more.stop)
+    }
+
+    /// Quiet, beside the title: the stored texts are already shown while the cache is checked.
+    @ViewBuilder private var status: some View {
+        let pending = model.pending
+        HStack(spacing: 5) {
+            if model.isChecking {
+                ProgressView().controlSize(.mini)
+                Text("Проверяю новые голосовые…")
+            } else if pending > 0 && model.problem == nil {
+                ProgressView().controlSize(.mini)
+                Text("Расшифровываю: \(pending)")
+            } else if !model.items.isEmpty && model.problem == nil {
+                Image(systemName: "checkmark")
+                Text("Все голосовые расшифрованы")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     private var list: some View {
@@ -268,6 +284,8 @@ private struct VoiceRow: View {
     private var meta: String {
         let seconds = Int(item.file.duration.rounded())
         let time = item.file.date.formatted(.relative(presentation: .named))
+        // Texts stored before 0.13.0 have no duration.
+        guard seconds > 0 else { return time }
         return "\(time) · \(seconds / 60):\(String(format: "%02d", seconds % 60))"
     }
 

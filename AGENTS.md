@@ -188,10 +188,16 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   to it with both kept, so a `<name>` next to a different `_partial` file is still downloading).
   More, 3 at a time: scrolling down past the end, ↓ at the end, or the "Ещё 3" button (the folder
   listing, plain `lstat` over ~10 000 files in ~0.2 s — FileManager resource values took 3 s — is
-  read once per opening and paged). Transcribed on opening, newest
-  first, with the current engine; texts of the last 200 files kept in
-  `~/Library/Application Support/GeniusTyper/dictation/voice-texts.json` (by path and date), so reopening, also
-  after a restart, transcribes nothing again (asked 2026-10-26); nothing goes into the dictation history or statistics (the owner wants only own dictation there). The chat a file came from is only in Telegram's encrypted database, so the
+  read once per opening and paged). **Stored texts first** (asked 2026-10-26): opening shows at
+  once the texts kept in `~/Library/Application Support/GeniusTyper/dictation/voice-texts.json`
+  (`VoiceText`: path, file date, duration, text, when transcribed) for the last
+  `Prefs.voicesKeepDays` (Диктовка → "Хранить расшифровки": 1/3/7/30 days, default 7; kept by the
+  message date or by when it was transcribed), newest first, also after the file left Telegram's
+  cache; meanwhile `TelegramVoices.scan` looks for voice messages of those days not stored yet
+  (non-voice files are remembered for the run, so their headers are read once), they join the list
+  in their place and are transcribed newest first. A quiet status beside the title: "Проверяю новые
+  голосовые…" → "Расшифровываю: N" → "Все голосовые расшифрованы". Older ones on request, 3 at a
+  time, as above. The format before 0.13.0 (`key` + `text`) is read and converted. Nothing goes into the dictation history or statistics (the owner wants only own dictation there). The chat a file came from is only in Telegram's encrypted database, so the
   owner keeps voice auto-download on for private chats only (Telegram → Data and Storage). Video
   circles (mp4) are not included. `-voicesRoot <folder>` points it at a test folder; `--voices`
   opens the popup at launch. The owner declined importing TypeWhisper's history (2026-10-26).

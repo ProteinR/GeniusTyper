@@ -8,6 +8,7 @@ enum Prefs {
         defaults.register(defaults: [
             "dictationEnabled": false,
             "voicesEnabled": true,
+            "voicesKeepDays": 7,
             "dictationYo": true,
             "dictationSounds": true,
             "escCancels": true,
@@ -26,6 +27,13 @@ enum Prefs {
     static var voicesEnabled: Bool {
         get { defaults.bool(forKey: "voicesEnabled") }
         set { defaults.set(newValue, forKey: "voicesEnabled") }
+    }
+
+    /// Texts of Telegram voice messages are kept and shown for this many days; voice messages of
+    /// these days not transcribed yet are transcribed on opening.
+    static var voicesKeepDays: Int {
+        get { max(1, defaults.integer(forKey: "voicesKeepDays")) }
+        set { defaults.set(newValue, forKey: "voicesKeepDays") }
     }
 
     /// ё in dictated text ("еще" → "ещё"): Parakeet nearly always writes е.

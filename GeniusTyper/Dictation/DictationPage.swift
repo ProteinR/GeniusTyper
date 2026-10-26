@@ -9,6 +9,7 @@ struct DictationPage: View {
     @AppStorage("escCancels") private var escCancels = true
     @AppStorage("dictationYo") private var yo = true
     @AppStorage("voicesEnabled") private var voices = true
+    @AppStorage("voicesKeepDays") private var keepDays = 7
     @AppStorage("mascot") private var mascot = Mascot.none.rawValue
 
     var body: some View {
@@ -69,6 +70,21 @@ struct DictationPage: View {
                 }
                 ShortcutRow(kind: .voices)
                     .active(voices)
+                LabeledContent {
+                    Menu {
+                        ForEach([1, 3, 7, 30], id: \.self) { days in
+                            Button(Self.daysTitle(days)) { keepDays = days }
+                        }
+                    } label: {
+                        Text(Self.daysTitle(keepDays))
+                    }
+                    .fixedSize()
+                } label: {
+                    Text("Хранить расшифровки")
+                    Text("Показываются сразу; новые голосовые за это время расшифровываются при открытии")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .active(voices)
             } footer: {
                 Text("Голосовые берутся из кеша приложения Telegram. Чтобы туда не попадали голосовые из групп, в Telegram → Настройки → Данные и память → Автозагрузка медиа оставьте голосовые только для личных чатов.")
                     .font(.caption)
@@ -79,6 +95,14 @@ struct DictationPage: View {
         }
         .formStyle(.grouped)
         .toggleStyle(LightSwitchStyle())
+    }
+
+    static func daysTitle(_ days: Int) -> String {
+        switch days {
+        case 1: return String(localized: "1 день")
+        case 3: return String(localized: "3 дня")
+        default: return String(localized: "\(days) дней")
+        }
     }
 }
 

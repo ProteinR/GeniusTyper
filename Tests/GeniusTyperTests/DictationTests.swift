@@ -192,6 +192,47 @@ final class TelegramVoicesTests: XCTestCase {
         XCTAssertEqual(second.next, candidates.count)
     }
 
+    func testScanFindsNewVoicesOfTheLastDays() throws {
+        let voice = try Data(contentsOf: Bundle(for: Self.self).url(forResource: "voice", withExtension: "ogg")!)
+        try put("telegram-cloud-document-stored", voice, age: 60)
+        try put("telegram-cloud-document-new", voice, age: 10)
+        try put("telegram-cloud-document-week", voice, age: 8 * 86_400)
+        try put("telegram-cloud-photo", Data([0xFF, 0xD8, 0xFF, 0xE0] + [UInt8](repeating: 0, count: 100)), age: 5)
+        let candidates = TelegramVoices.candidates(in: root)
+        let stored = candidates.first { $0.url.lastPathComponent.hasSuffix("stored") }!
+        let known: Set = [VoiceText.key(path: stored.url.path, date: stored.date)]
+        let since = Date().addingTimeInterval(-7 * 86_400)
+
+        let first = TelegramVoices.scan(candidates, since: since, known: known, notVoices: [])
+        XCTAssertEqual(first.fresh.map(\.url.lastPathComponent), ["telegram-cloud-document-new"])
+        XCTAssertEqual(first.others.count, 1)
+        XCTAssertEqual(first.older.map(\.url.lastPathComponent), ["telegram-cloud-document-week"])
+        // The photo's header is not read again.
+        let second = TelegramVoices.scan(candidates, since: since, known: known, notVoices: Set(first.others))
+        XCTAssertEqual(second.others, [])
+        XCTAssertEqual(second.fresh.count, 1)
+    }
+
+    func testStoredTextsKeptForDaysAndOldFormatRead() throws {
+        let now = Date()
+        let day: TimeInterval = 86_400
+        let texts = [
+            VoiceText(path: "/a", date: now.addingTimeInterval(-2 * day), duration: 3, text: "свежее", added: now.addingTimeInterval(-2 * day)),
+            VoiceText(path: "/b", date: now.addingTimeInterval(-10 * day), duration: 3, text: "старое", added: now.addingTimeInterval(-10 * day)),
+            VoiceText(path: "/c", date: now.addingTimeInterval(-10 * day), duration: 3, text: "по запросу", added: now.addingTimeInterval(-day)),
+        ]
+        XCTAssertEqual(VoiceText.kept(texts, days: 7, now: now).map(\.text), ["свежее", "по запросу"])
+        XCTAssertEqual(VoiceText.kept(texts, days: 1, now: now).map(\.text), ["по запросу"])
+        XCTAssertEqual(VoiceText.decode(try JSONEncoder().encode(texts)), texts)
+
+        let old = Data(#"[{"key":"/media/telegram-cloud-document-1|1792000000.123456","text":"привет"}]"#.utf8)
+        let migrated = VoiceText.decode(old)
+        XCTAssertEqual(migrated.map(\.path), ["/media/telegram-cloud-document-1"])
+        XCTAssertEqual(migrated[0].date.timeIntervalSince1970, 1_792_000_000.123456, accuracy: 0.001)
+        XCTAssertEqual(migrated[0].text, "привет")
+        XCTAssertEqual(migrated[0].key, VoiceText.key(path: "/media/telegram-cloud-document-1", date: Date(timeIntervalSince1970: 1_792_000_000.123456)))
+    }
+
     func testDecodesToSixteenKilohertz() throws {
         let url = Bundle(for: Self.self).url(forResource: "voice", withExtension: "ogg")!
         XCTAssertTrue(TelegramVoices.isOggOpus(url))
