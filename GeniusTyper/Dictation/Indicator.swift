@@ -247,7 +247,8 @@ private final class PillView: NSView {
 /// Bars: newest on the right; a flat white line until the first sound (asked 2026-10-26: dots,
 /// dim bars and bars filling in one by one all read as "wait, loading"), then bars to the end,
 /// the quiet ones short bars, not dots. Wave: 16 thin bars scrolling, like Voice Memos. Line: a
-/// smooth oscilloscope line that swings with the voice, redrawn 30 times a second while recording.
+/// smooth oscilloscope line that swings with the voice, redrawn 60 times a second while recording
+/// (at 30 it moved half as fast as the preview the owner chose, 2026-10-26).
 private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
@@ -291,16 +292,16 @@ private final class BarsView: NSView {
     }
 
     private func startAnimating() {
-        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.step() }
         }
-        timer.tolerance = 1.0 / 120
+        timer.tolerance = 1.0 / 240
         RunLoop.main.add(timer, forMode: .common)
         animation = timer
     }
 
     private func step() {
-        smooth += (target - smooth) * 0.35
+        smooth += (target - smooth) * 0.25
         phase += 0.12 + smooth * 0.3
         trace.removeFirst()
         trace.append(smooth)

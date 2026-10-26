@@ -68,6 +68,30 @@ above). Not a leak; moving the settings window into its own process would be the
 | Bruce | 6.0–7.1 % | 3.6–5.2 % |
 | Footprint while shown | 24.8–26.1 MB | 23.6–24.1 MB |
 
+#### 0.13.12: level styles (2026-10-26)
+
+`--indicator-test` now runs each level style without an animation, then each animation with the
+bars, at the owner's speech levels (0.15–0.36, random, 12 a second) instead of a steady 0.6, two
+rounds. WindowServer measured from outside with `ps -o time=` over the same 12 s. The machine was
+busier than for the table above (WindowServer 43.8 % with no pill at all), so the pill numbers
+are higher than 1.2 % there; compare the rows with each other.
+
+| | App CPU | WindowServer | Footprint |
+|---|---|---|---|
+| Nothing shown (idle) | 0.1 % | 43.8 % (baseline) | — |
+| Полоски | 2.3–2.4 % | 43.6–43.7 % | 23.8–24.4 MB |
+| Плотная волна | 2.3–2.7 % | 44.2 % | 23.9–24.7 MB |
+| Линия (60 fps) | 9.3–9.6 % | 43.8–44.9 % | 24.0–24.8 MB |
+| Полоски + monkey | 4.7–4.9 % | 44.6–45.2 % | 24.0–25.7 MB |
+| Полоски + grey cat | 4.0–4.2 % | 44.4–44.6 % | 23.8–23.9 MB |
+| Полоски + cat in a wig | 4.1–4.2 % | 44.4–44.8 % | 23.8–23.9 MB |
+| Полоски + Bruce | 5.5–5.6 % | 44.4–45.3 % | 24.0–24.3 MB |
+
+The line is the only style that redraws on its own (60 times a second, the speed of the preview
+the owner chose); the bars and the wave redraw only when a level arrives (~12 a second).
+WindowServer stays within ~1.5 % of its baseline for all of them. Footprint does not grow
+between rounds.
+
 What `sample` showed: with the pill alone the app is asleep nearly all the time (the level
 bars, now their own view, redraw ~12 times a second; the text twice a second). With an animation
 the time went into PNG decoding (zlib inflate + PNG filters, ~1 ms a frame at 12–15 fps).

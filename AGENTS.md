@@ -173,7 +173,8 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   **Level style** (`LevelStyle`, Диктовка → Индикатор, asked 2026-10-26 after an interactive
   preview of six): "Полоски" (above, default), "Плотная волна" (16 thin bars scrolling, a dotted
   line in silence, like Voice Memos) and "Линия" (a smooth oscilloscope line that swings with the
-  voice; its own 30 fps timer only while recording, ~6 % CPU then, stopped on hide). The demo
+  voice; its own 60 fps timer only while recording, the speed of the preview; ~9.5 % CPU then
+  against ~2.4 % for the bars, stopped on hide; `DICTATION-PROFILING.md`). The demo
   ("Показать", `--indicator-demo`) uses the owner's levels.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
   `--indicator-demo`): a monkey, one of two cats or Bruce Almighty above the pill while recording/transcribing,
@@ -246,8 +247,8 @@ Dictation checks: - `scripts/test.sh` also runs these unit tests (hybrid key, sh
   Telegram voice lookup with `Tests/GeniusTyperTests/Fixtures/voice.ogg`, synthesized speech).
 - `--transcribe-file <audio>`: transcribes a file with the current engine twice, logs text, time,
   footprint of the app and the helper (`say -v Milena -o ru.aiff "…"` for Russian speech).
-- `--indicator-test`: the pill with each animation for 12 s (steady speech, then quiet), two rounds;
-  logs the app's CPU and footprint for each.
+- `--indicator-test`: the pill in each level style, then with each animation, 12 s each (speech at
+  the owner's levels, then quiet), two rounds; logs the app's CPU and footprint for each.
 - `--dictation-stress-test`: three rounds of every settings page plus load/transcribe/unload of the model,
   footprint after each step; growing every round = a leak.
 - - `PROFILE=1 scripts/install.sh`: signs with get-task-allow for `heap`/`leaks`/`vmmap`.

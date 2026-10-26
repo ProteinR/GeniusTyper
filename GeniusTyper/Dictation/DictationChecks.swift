@@ -60,14 +60,16 @@ extension AppDelegate {
         }
     }
 
-    /// `--indicator-test`: the dictation pill with each animation in turn, 10 s of steady speech
-    /// (level 0.6, 12 times a second) and 2 s of quiet, logging the CPU time the app used and the
-    /// footprint for each; then one more round of all of them (growing = a leak). WindowServer's
-    /// share is measured from outside (`ps -o time= -p <WindowServer>`), the log has the times.
+    /// `--indicator-test`: the dictation pill in each level style (no animation), then with each
+    /// animation (bars), 10 s of speech at the owner's levels (0.15–0.36, now and then louder, 12
+    /// times a second) and 2 s of quiet, logging the CPU time the app used and the footprint for
+    /// each; then one more round of all of them (growing = a leak). WindowServer's share is
+    /// measured from outside (`ps -o time= -p <WindowServer>`), the log has the times.
     @MainActor
     func runIndicatorTest() {
-        let saved = Prefs.mascot
-        var queue = Mascot.allCases + Mascot.allCases
+        let savedMascot = Prefs.mascot, savedStyle = Prefs.levelStyle
+        let round = LevelStyle.allCases.map { ($0, Mascot.none) } + Mascot.allCases.filter { $0 != .none }.map { (LevelStyle.bars, $0) }
+        var queue = round + round
         func cpuSeconds() -> Double {
             var usage = rusage()
             getrusage(RUSAGE_SELF, &usage)
@@ -75,14 +77,17 @@ extension AppDelegate {
         }
         @MainActor func next() {
             guard !queue.isEmpty else {
-                Prefs.mascot = saved
+                Prefs.mascot = savedMascot
+                Prefs.levelStyle = savedStyle
                 Log.info("Indicator test done: footprint \(Self.footprintMB()) MB", "test")
                 return
             }
-            let mascot = queue.removeFirst()
+            let (style, mascot) = queue.removeFirst()
+            let name = mascot == .none ? style.rawValue : "\(style.rawValue)+\(mascot.rawValue)"
+            Prefs.levelStyle = style.rawValue
             Prefs.mascot = mascot.rawValue
             let cpu = cpuSeconds(), started = Date()
-            Log.info("Indicator test \(mascot.rawValue) start", "test")
+            Log.info("Indicator test \(name) start", "test")
             Indicator.shared.show(.recording(since: started))
             let timer = Timer(timeInterval: 1.0 / 12, repeats: true) { timer in
                 MainActor.assumeIsolated {
@@ -90,14 +95,15 @@ extension AppDelegate {
                     guard elapsed < 12 else {
                         timer.invalidate()
                         let used = cpuSeconds() - cpu
-                        Log.info(String(format: "Indicator test %@: %.2f s CPU in 12 s (%.1f %%), footprint %@ MB", mascot.rawValue,
+                        Log.info(String(format: "Indicator test %@: %.2f s CPU in 12 s (%.1f %%), footprint %@ MB", name,
                                         used, used / 12 * 100, Self.footprintMB()), "test")
                         Indicator.shared.hide()
                         Memory.giveBackSoon()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { MainActor.assumeIsolated { next() } }
                         return
                     }
-                    Indicator.shared.level(elapsed < 10 ? 0.6 : 0.02)
+                    let speech = Float.random(in: 0.15...0.36) + (Float.random(in: 0...1) < 0.15 ? 0.1 : 0)
+                    Indicator.shared.level(elapsed < 10 ? speech : 0)
                 }
             }
             RunLoop.main.add(timer, forMode: .common)
