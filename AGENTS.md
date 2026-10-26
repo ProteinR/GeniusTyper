@@ -170,6 +170,11 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   read as "not hearing"; both seen on recorded dictations) (asked 2026-10-26: 3 pt dots, dim bars and bars
   filling in one by one all read as "wait, loading"); "Распознаю…"; short messages
   (no model, no key, nothing recognised). AppKit-drawn `NSPanel`, built on show, released on hide.
+  **Level style** (`LevelStyle`, Диктовка → Индикатор, asked 2026-10-26 after an interactive
+  preview of six): "Полоски" (above, default), "Плотная волна" (16 thin bars scrolling, a dotted
+  line in silence, like Voice Memos) and "Линия" (a smooth oscilloscope line that swings with the
+  voice; its own 30 fps timer only while recording, ~6 % CPU then, stopped on hide). The demo
+  ("Показать", `--indicator-demo`) uses the owner's levels.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
   `--indicator-demo`): a monkey, one of two cats or Bruce Almighty above the pill while recording/transcribing,
   typing at full speed while the level is above 0.3 (and 0.2 s after), then slowing down

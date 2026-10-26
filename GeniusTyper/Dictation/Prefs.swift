@@ -54,6 +54,12 @@ enum Prefs {
         set { defaults.set(newValue, forKey: "escCancels") }
     }
 
+    /// How the pill shows the microphone level (`LevelStyle` raw value).
+    static var levelStyle: String {
+        get { defaults.string(forKey: "levelStyle") ?? LevelStyle.bars.rawValue }
+        set { defaults.set(newValue, forKey: "levelStyle") }
+    }
+
     /// The character above the pill while dictating (`Mascot` raw value).
     static var mascot: String {
         get { defaults.string(forKey: "mascot") ?? Mascot.none.rawValue }

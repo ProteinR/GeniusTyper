@@ -11,6 +11,7 @@ struct DictationPage: View {
     @AppStorage("voicesEnabled") private var voices = true
     @AppStorage("voicesKeepDays") private var keepDays = 7
     @AppStorage("mascot") private var mascot = Mascot.none.rawValue
+    @AppStorage("levelStyle") private var levelStyle = LevelStyle.bars.rawValue
 
     var body: some View {
         Form {
@@ -39,6 +40,22 @@ struct DictationPage: View {
                         Text("Ставить ё в надиктованном")
                         Text("Модель почти всегда пишет «е»: «еще» → «ещё», как при наборе").font(.caption).foregroundStyle(.secondary)
                     }
+                }
+                LabeledContent {
+                    HStack(spacing: 6) {
+                        Menu {
+                            ForEach(LevelStyle.allCases) { item in
+                                Button(item.title) { levelStyle = item.rawValue }
+                            }
+                        } label: {
+                            Text((LevelStyle(rawValue: levelStyle) ?? .bars).title)
+                        }
+                        .fixedSize()
+                        Button("Показать") { Indicator.shared.demo() }
+                    }
+                } label: {
+                    Text("Индикатор")
+                    Text("Как индикатор показывает громкость голоса").font(.caption).foregroundStyle(.secondary)
                 }
                 LabeledContent {
                     HStack(spacing: 6) {

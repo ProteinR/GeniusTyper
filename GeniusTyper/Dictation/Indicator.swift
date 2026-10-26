@@ -27,7 +27,7 @@ final class Indicator {
         hideWork = nil
         let pill = makeIfNeeded()
         pill.state = state
-        if case .recording = state { pill.bars.reset() }
+        if case .recording = state { pill.bars.reset(style: LevelStyle.current) }
         if case .message = state {
             removeMascot()
         } else if mascot == nil, let view = MascotView(Mascot.current) {
@@ -51,7 +51,8 @@ final class Indicator {
         mascot?.heard(loud: value > 0.3)
     }
 
-    /// The pill as when dictating, with made-up speech: 1.5 s talking, 1 s silent, 6 s in all.
+    /// The pill as when dictating, with made-up speech at the owner's levels (silence 0, speech
+    /// 0.15–0.36, now and then louder): 1.5 s talking, 1 s silent, 6 s in all.
     /// For choosing the animation in the settings and for `--indicator-demo`.
     func demo() {
         demoTimer?.invalidate()
@@ -67,7 +68,7 @@ final class Indicator {
                     return
                 }
                 let talking = elapsed.truncatingRemainder(dividingBy: 2.5) < 1.5
-                self.level(talking ? Float.random(in: 0.4...0.9) : Float.random(in: 0...0.1))
+                self.level(talking ? Float.random(in: 0.15...0.36) + (Float.random(in: 0...1) < 0.15 ? 0.1 : 0) : 0)
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -80,6 +81,7 @@ final class Indicator {
         timer?.invalidate()
         timer = nil
         removeMascot()
+        pill?.bars.stopAnimating()
         panel?.orderOut(nil)
         panel = nil
         pill = nil
@@ -121,6 +123,7 @@ final class Indicator {
             mascot.setFrameOrigin(NSPoint(x: ((size.width - mascot.frame.width) / 2).rounded(), y: pillSize.height + 2 - MascotView.shadowPad))
         }
         pill.frame = NSRect(x: ((size.width - pillSize.width) / 2).rounded(), y: 0, width: pillSize.width, height: pillSize.height)
+        pill.placeBars()
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? .zero
@@ -156,15 +159,13 @@ final class Indicator {
 /// The pill: background, dot and text, redrawn twice a second at most (the clock). The level bars
 /// are their own small view, so the ~12 level updates a second redraw only them.
 private final class PillView: NSView {
-    static let barCount = 5
-
     var state: Indicator.State = .transcribing {
         didSet {
             needsDisplay = true
-            if case .recording = state { bars.isHidden = false } else { bars.isHidden = true }
+            if case .recording = state { bars.isHidden = false } else { bars.isHidden = true; bars.stopAnimating() }
         }
     }
-    let bars = BarsView(frame: NSRect(x: 0, y: 0, width: CGFloat(barCount) * 5, height: BarsView.maxHeight))
+    let bars = BarsView(frame: NSRect(x: 0, y: 0, width: LevelStyle.bars.width, height: BarsView.maxHeight))
     var tick = 0
 
     override init(frame: NSRect) {
@@ -177,7 +178,11 @@ private final class PillView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        bars.setFrameOrigin(NSPoint(x: newSize.width - 14 - bars.frame.width + 1, y: ((newSize.height - bars.frame.height) / 2).rounded()))
+        placeBars()
+    }
+
+    func placeBars() {
+        bars.setFrameOrigin(NSPoint(x: bounds.width - 14 - bars.frame.width + 1, y: ((bounds.height - bars.frame.height) / 2).rounded()))
     }
 
     private static let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
@@ -205,7 +210,7 @@ private final class PillView: NSView {
         case .message: textWidth = (text as NSString).size(withAttributes: Self.textAttributes).width
         }
         var width = 14 + 8 + 8 + textWidth + 14
-        if case .recording = state { width += 8 + CGFloat(Self.barCount) * 5 }
+        if case .recording = state { width += 8 + bars.frame.width }
         return NSSize(width: ceil(width), height: 38)
     }
 
@@ -238,34 +243,81 @@ private final class PillView: NSView {
     }
 }
 
-/// The microphone level bars, newest on the right. Until the first sound they are a flat white
-/// line, there from the first frame (asked 2026-10-26: dots, dim bars and bars filling in one by
-/// one all read as "wait, loading"); from the first sound on they stay bars to the end, the quiet
-/// ones short bars, not dots and not the line again (the line came back while speaking softly).
+/// The microphone level in the pill, drawn in the chosen `LevelStyle`.
+/// Bars: newest on the right; a flat white line until the first sound (asked 2026-10-26: dots,
+/// dim bars and bars filling in one by one all read as "wait, loading"), then bars to the end,
+/// the quiet ones short bars, not dots. Wave: 16 thin bars scrolling, like Voice Memos. Line: a
+/// smooth oscilloscope line that swings with the voice, redrawn 30 times a second while recording.
 private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
     static let lineHeight: CGFloat = 2
 
-    private var levels = Array(repeating: CGFloat(0), count: PillView.barCount)
+    private var style = LevelStyle.bars
+    private var levels: [CGFloat] = []
     private var heardSound = false
+    private var smooth: CGFloat = 0
+    private var target: CGFloat = 0
+    private var phase: CGFloat = 0
+    private var trace: [CGFloat] = []
+    private var animation: Timer?
 
-    func reset() {
-        levels = Array(repeating: 0, count: PillView.barCount)
+    func reset(style: LevelStyle) {
+        self.style = style
+        setFrameSize(NSSize(width: style.width, height: Self.maxHeight))
+        levels = Array(repeating: 0, count: style.historyCount)
+        trace = Array(repeating: 0, count: LevelStyle.traceCount)
         heardSound = false
+        smooth = 0
+        target = 0
+        stopAnimating()
+        if style == .line { startAnimating() }
         needsDisplay = true
     }
 
     func push(_ level: CGFloat) {
+        let loudness = LevelBars.loudness(level)
+        if loudness > 0 { heardSound = true }
+        target = loudness
+        guard !levels.isEmpty else { return }
         levels.removeFirst()
         levels.append(level)
-        if LevelBars.loudness(level) > 0 { heardSound = true }
+        if style != .line { needsDisplay = true }
+    }
+
+    func stopAnimating() {
+        animation?.invalidate()
+        animation = nil
+    }
+
+    private func startAnimating() {
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.step() }
+        }
+        timer.tolerance = 1.0 / 120
+        RunLoop.main.add(timer, forMode: .common)
+        animation = timer
+    }
+
+    private func step() {
+        smooth += (target - smooth) * 0.35
+        phase += 0.12 + smooth * 0.3
+        trace.removeFirst()
+        trace.append(smooth)
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(white: 0.95, alpha: 1).setFill()
         let midY = bounds.height / 2
+        switch style {
+        case .bars: drawBars(midY: midY)
+        case .wave: drawWave(midY: midY)
+        case .line: drawLine(midY: midY)
+        }
+    }
+
+    private func drawBars(midY: CGFloat) {
+        NSColor(white: 0.95, alpha: 1).setFill()
         guard heardSound else {
             NSBezierPath(roundedRect: NSRect(x: 0, y: midY - Self.lineHeight / 2, width: bounds.width - 2, height: Self.lineHeight),
                          xRadius: Self.lineHeight / 2, yRadius: Self.lineHeight / 2).fill()
@@ -278,6 +330,64 @@ private final class BarsView: NSView {
             x += 5
         }
     }
+
+    private func drawWave(midY: CGFloat) {
+        NSColor(white: 0.95, alpha: 1).setFill()
+        var x: CGFloat = 0
+        for level in levels {
+            let height = max(2, LevelBars.loudness(level) * (Self.maxHeight - 2))
+            NSBezierPath(roundedRect: NSRect(x: x, y: midY - height / 2, width: 2, height: height), xRadius: 1, yRadius: 1).fill()
+            x += 3.5
+        }
+    }
+
+    private func drawLine(midY: CGFloat) {
+        let path = NSBezierPath()
+        path.lineWidth = 2
+        path.lineCapStyle = .round
+        path.lineJoinStyle = .round
+        for (index, value) in trace.enumerated() {
+            let point = NSPoint(x: 1 + CGFloat(index) * 1.3, y: midY + value * (Self.maxHeight / 2 - 2) * sin(CGFloat(index) * 0.9 + phase * 2))
+            if index == 0 { path.move(to: point) } else { path.line(to: point) }
+        }
+        NSColor(white: 0.95, alpha: 1).setStroke()
+        path.stroke()
+    }
+}
+
+/// How the pill shows the microphone level (Настройки → Диктовка → Индикатор).
+enum LevelStyle: String, CaseIterable, Identifiable {
+    case bars, wave, line
+
+    static let traceCount = 40
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .bars: String(localized: "Полоски")
+        case .wave: String(localized: "Плотная волна")
+        case .line: String(localized: "Линия")
+        }
+    }
+
+    var historyCount: Int {
+        switch self {
+        case .bars: 5
+        case .wave: 16
+        case .line: 0
+        }
+    }
+
+    var width: CGFloat {
+        switch self {
+        case .bars: 25
+        case .wave: 55
+        case .line: 54
+        }
+    }
+
+    static var current: LevelStyle { LevelStyle(rawValue: Prefs.levelStyle) ?? .bars }
 }
 
 /// How high a level bar is, 0…1 of its height. Tuned on the owner's voice recorded with the
