@@ -392,10 +392,10 @@ private struct ClipboardListView: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
-                // As in Maccy: the settings from the history itself (the app's panel, its clipboard section).
+                // As in Maccy: the settings from the history itself (the clipboard page).
                 Button {
                     ClipboardWindow.hide()
-                    DispatchQueue.main.async { AppDelegate.showPanel() }
+                    DispatchQueue.main.async { SettingsWindow.shared.show(page: .clipboard) }
                 } label: {
                     Image(systemName: "gearshape").foregroundStyle(.secondary)
                 }

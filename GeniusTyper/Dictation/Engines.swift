@@ -45,7 +45,7 @@ enum EngineID: String, CaseIterable, Identifiable {
     }
 }
 
-/// Parakeet TDT 0.6B v3, run by the DiktantEngine helper (FluidAudio, Neural Engine). The helper is
+/// Parakeet TDT 0.6B v3, run by the GeniusTyperEngine helper (FluidAudio, Neural Engine). The helper is
 /// started when recording starts (the model loads while the user speaks) and stopped after a pause
 /// (`EngineStore`): loading the model leaves ~30 MB of fragmented memory that a running process
 /// never gives back to macOS, so it is a separate process that exits with the model.
@@ -155,8 +155,8 @@ actor ParakeetEngine {
     }
 
     private static func launch(_ mode: String) throws -> (Process, FileHandle, LineReader) {
-        guard let url = Bundle.main.url(forAuxiliaryExecutable: "DiktantEngine") else {
-            throw EngineError(String(localized: "Нет DiktantEngine в приложении"))
+        guard let url = Bundle.main.url(forAuxiliaryExecutable: "GeniusTyperEngine") else {
+            throw EngineError(String(localized: "Нет GeniusTyperEngine в приложении"))
         }
         let process = Process()
         process.executableURL = url
@@ -173,7 +173,7 @@ actor ParakeetEngine {
 /// Reads the helper's JSON lines without blocking the caller.
 final class LineReader: @unchecked Sendable {
     private let handle: FileHandle
-    private let queue = DispatchQueue(label: "com.dmemruk.Diktant.engine-output")
+    private let queue = DispatchQueue(label: "com.dmemruk.GeniusTyper.engine-output")
     private var buffer = Data()
 
     init(_ handle: FileHandle) { self.handle = handle }
@@ -215,7 +215,7 @@ struct CloudEngine {
         guard let url = URL(string: baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ ")) + "/audio/transcriptions") else {
             throw EngineError(String(localized: "Неверный адрес сервиса"))
         }
-        let boundary = "Diktant-\(UUID().uuidString)"
+        let boundary = "GeniusTyper-\(UUID().uuidString)"
         var body = Data()
         func field(_ name: String, _ value: String) {
             body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".data(using: .utf8)!)
@@ -269,7 +269,7 @@ enum WAV {
 
 /// API keys in the login Keychain, one per engine.
 enum Keychain {
-    private static let service = "com.dmemruk.Diktant"
+    private static let service = "com.dmemruk.GeniusTyper"
 
     static func key(for id: EngineID) -> String {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,

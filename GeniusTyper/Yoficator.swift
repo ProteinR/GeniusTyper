@@ -38,6 +38,27 @@ struct Yoficator {
         return nil
     }
 
+    /// Every word of a text (dictation): "Еще раз, Артем" → "Ещё раз, Артём". Words are runs of
+    /// letters, so "кое-что" is two words and punctuation stays where it was.
+    func restoreText(_ text: String) -> String {
+        var result = ""
+        var word = ""
+        func flush() {
+            result += restore(word) ?? word
+            word = ""
+        }
+        for character in text {
+            if character.isLetter {
+                word.append(character)
+            } else {
+                flush()
+                result.append(character)
+            }
+        }
+        flush()
+        return result
+    }
+
     private static func capitalized(_ word: String) -> String {
         word.prefix(1).uppercased() + word.dropFirst()
     }

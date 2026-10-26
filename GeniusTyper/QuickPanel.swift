@@ -2,35 +2,37 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// What the menu bar icon's left click opens: a small panel under the icon with a second column
-/// beside it: the latest Telegram voice messages, transcribed as it opens, or (hovering "История")
-/// the history with search (the latest dictations are at its top, so they are not repeated under
-/// the two items). Built on show and
-/// released on close; Esc, a click elsewhere or the icon again closes it. Does not take the focus
-/// from the app in front, but becomes key so the search field can be typed in.
+/// What the menu bar icon's left click opens: a short menu-like panel under the icon. Only what is
+/// used daily: the dictation and clipboard histories, the Telegram voices (a second column beside
+/// it, open at once when they are on, so the latest ones start transcribing), "Исправлять текст"
+/// for everything typed and for the app in front, the settings and quit. Rows of switched-off
+/// parts are not shown. Built on show and released on close; Esc, a click elsewhere or the icon
+/// again closes it. Does not take the focus from the app in front, but becomes key so the history
+/// search can be typed in.
 @MainActor
-final class MenuPanel {
-    static let shared = MenuPanel()
+final class QuickPanel {
+    static let shared = QuickPanel()
 
     private var panel: Panel?
-    private var host: NSHostingView<MenuView>?
+    private var host: NSHostingView<QuickMenuView>?
     private var monitors: [Any] = []
     private var changes: AnyCancellable?
     private weak var button: NSStatusBarButton?
+    /// The icon on the screen; nil when it is hidden (the panel then opens at the top right).
+    private var anchor: NSRect?
 
     var isShown: Bool { panel != nil }
 
-    func toggle(under button: NSStatusBarButton) {
-        isShown ? close() : show(under: button)
-    }
-
-    func show(under button: NSStatusBarButton, side: String? = nil) {
+    func show(under button: NSStatusBarButton?, anchor: NSRect?, side: String? = nil) {
         self.button = button
-        // Opens on the voices: the latest ones start transcribing at once.
-        if panel == nil { build(side: side.flatMap(Side.init(rawValue:)) ?? .voices) }
+        self.anchor = anchor
+        if panel == nil {
+            let initial = side.flatMap(Side.init(rawValue:)) ?? (Prefs.dictationEnabled && Prefs.voicesEnabled ? .voices : nil)
+            build(side: initial)
+        }
         fit(initial: true)
         panel?.makeKeyAndOrderFront(nil)
-        button.highlight(true)
+        button?.highlight(true)
         watchForClose()
     }
 
@@ -46,8 +48,8 @@ final class MenuPanel {
         Memory.giveBackSoon()
     }
 
-    fileprivate func build(side: Side?) {
-        let host = NSHostingView(rootView: MenuView(
+    private func build(side: Side?) {
+        let host = NSHostingView(rootView: QuickMenuView(
             initialSide: side,
             close: { [weak self] in self?.close() },
             resized: { [weak self] in self?.fit(initial: false) }))
@@ -88,21 +90,28 @@ final class MenuPanel {
         host.layoutSubtreeIfNeeded()
         let size = host.fittingSize
         guard initial || size != panel.frame.size else { return }
+        let mouse = NSEvent.mouseLocation
+        let screen = button?.window?.screen ?? NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+        let visible = screen?.visibleFrame ?? .zero
         var top = panel.frame.maxY, right = panel.frame.maxX
-        if initial, let button, let window = button.window {
-            let icon = window.convertToScreen(button.convert(button.bounds, to: nil))
-            top = icon.minY - 4
-            right = icon.maxX + 8
+        if initial {
+            if let anchor {
+                top = anchor.minY - 4
+                right = anchor.maxX + 8
+            } else {
+                top = visible.maxY - 8
+                right = visible.maxX - 8
+            }
         }
-        let visible = (button?.window?.screen ?? NSScreen.main)?.visibleFrame ?? .zero
         let x = max(visible.minX + 8, min(right - size.width, visible.maxX - size.width - 8))
         panel.setFrame(NSRect(x: x.rounded(), y: top - size.height, width: size.width, height: size.height), display: true)
     }
 
-    /// A click anywhere else or Esc closes it, like a menu (a click on the icon toggles it itself).
+    /// A click anywhere else, Esc, or another Space closes it, like a menu (a click on the icon
+    /// toggles it itself).
     private func watchForClose() {
         guard monitors.isEmpty else { return }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: { [weak self] _ in
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown], handler: { [weak self] _ in
             MainActor.assumeIsolated { self?.close() }
         }) { monitors.append(global) }
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.keyDown], handler: { [weak self] event in
@@ -120,11 +129,15 @@ final class MenuPanel {
 
 private enum Side: String { case voices, history }
 
-private struct MenuView: View {
+private struct QuickMenuView: View {
     let initialSide: Side?
     let close: () -> Void
     let resized: () -> Void
     @State private var side: Side?
+    @ObservedObject private var observer = Observer.shared
+    @ObservedObject private var clipboard = ClipboardStore.shared
+    @AppStorage("dictationEnabled") private var dictation = false
+    @AppStorage("voicesEnabled") private var voices = true
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -141,6 +154,7 @@ private struct MenuView: View {
             main
         }
         .fixedSize()
+        .toggleStyle(LightSwitchStyle())
         .onAppear { side = initialSide }
         .onChange(of: side) { old, new in
             // The voices keep transcribing while the history is shown; the panel's close clears them.
@@ -151,16 +165,63 @@ private struct MenuView: View {
 
     private var main: some View {
         VStack(alignment: .leading, spacing: 2) {
-            MenuRow(icon: "waveform", title: "Голосовые из Telegram",
-                    detail: HotkeyMonitor.shared.voicesShortcut.title, opens: true, selected: side == .voices) {
-                side = .voices
-            } hover: { side = .voices }
-            MenuRow(icon: "clock.arrow.circlepath", title: "История", opens: true, selected: side == .history) {
-                side = .history
-            } hover: { side = .history }
+            if dictation && voices {
+                MenuRow(icon: "waveform", title: "Голосовые из Telegram",
+                        detail: HotkeyMonitor.shared.voicesShortcut.title, opens: true, selected: side == .voices) {
+                    side = .voices
+                } hover: { side = .voices }
+            }
+            if dictation {
+                MenuRow(icon: "clock.arrow.circlepath", title: "История диктовок", opens: true, selected: side == .history) {
+                    side = .history
+                } hover: { side = .history }
+            }
+            if clipboard.enabled {
+                MenuRow(icon: "doc.on.clipboard", title: "История буфера", detail: clipboard.hotKey.title) {
+                    close()
+                    DispatchQueue.main.async { ClipboardWindow.show() }
+                } hover: { side = nil }
+            }
+            if dictation || clipboard.enabled { Divider().padding(.vertical, 4) }
+
+            SwitchRow(icon: "keyboard", title: "Исправлять текст", isOn: Binding(
+                get: { !observer.paused }, set: { observer.paused = !$0 }))
+                .help("Раскладка и ё. Выключено — Caps Lock только переключает раскладку")
+            if let app = observer.lastApp {
+                SwitchRow(icon: nil, title: "в «\(app.name)»", isOn: Binding(
+                    get: { !observer.autoOffApps.contains(app.id) },
+                    set: { observer.setAutoOff(app.id, !$0) }))
+                    .disabled(observer.paused)
+                    .opacity(observer.paused ? 0.45 : 1)
+            }
+            Divider().padding(.vertical, 4)
+
+            if missingPermission {
+                MenuRow(icon: "exclamationmark.triangle.fill", title: "Нужны разрешения", tint: .orange) {
+                    close()
+                    SettingsWindow.shared.show(page: .general)
+                } hover: { side = nil }
+            }
+            MenuRow(icon: "gearshape", title: "Настройки…", detail: "⌘,") {
+                close()
+                SettingsWindow.shared.show()
+            } hover: { side = nil }
+            MenuRow(icon: "power", title: "Завершить Genius Typer", detail: "⌘Q") {
+                NSApp.terminate(nil)
+            } hover: { side = nil }
+            Text(dictation ? "Genius Typer \(AppDelegate.appVersion) · \(HotkeyMonitor.shared.shortcut.title) — диктовка"
+                           : "Genius Typer \(AppDelegate.appVersion)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
         }
         .padding(6)
         .frame(width: 280)
+    }
+
+    private var missingPermission: Bool {
+        !observer.hasPermission || !observer.canPost || (dictation && AudioRecorder.permission != .authorized)
     }
 }
 
@@ -173,6 +234,7 @@ private struct MenuRow: View {
     var detail: String?
     var opens = false
     var selected = false
+    var tint: Color?
     let action: () -> Void
     let hover: () -> Void
     @State private var hovered = false
@@ -181,7 +243,7 @@ private struct MenuRow: View {
     var body: some View {
         Button(action: action) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: icon).frame(width: 16)
+                Image(systemName: icon).frame(width: 16).foregroundStyle(tint ?? .primary)
                 Text(title).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
                 if let detail { Text(detail).foregroundStyle(.secondary) }
                 if opens { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
@@ -201,6 +263,25 @@ private struct MenuRow: View {
             hoverWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
         }
+    }
+}
+
+/// A switch in the menu, aligned with the rows; without an icon it is indented (it belongs to the
+/// switch above).
+private struct SwitchRow: View {
+    let icon: String?
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Toggle(isOn: $isOn) {
+            HStack(spacing: 8) {
+                if let icon { Image(systemName: icon).frame(width: 16) } else { Color.clear.frame(width: 16, height: 1) }
+                Text(title).lineLimit(1).truncationMode(.middle)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
     }
 }
 

@@ -1,45 +1,21 @@
 import AppKit
 import SwiftUI
 
-/// Numbers from the journal, the last fixes (from memory) and the journal itself. A separate window:
-/// it is for analysing the detector, not for daily use.
-@MainActor
-enum StatsWindow {
-    private static var window: NSWindow?
-
-    static func show() {
-        let window = window ?? make()
-        Self.window = window
-        if !window.isVisible { window.center() }
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
-    }
-
-    private static func make() -> NSWindow {
-        let window = NSWindow(contentViewController: NSHostingController(rootView: StatsPanel().environmentObject(Observer.shared).environmentObject(Observer.shared.typing)))
-        window.styleMask = [.titled, .closable]
-        window.title = "Статистика"
-        window.isReleasedWhenClosed = false
-        return window
-    }
-}
-
-private struct StatsPanel: View {
-    @EnvironmentObject private var observer: Observer
-    @EnvironmentObject private var typing: TypingStats
+/// Статистика → Печать: numbers from the journal, the last fixes (from memory) and the journal
+/// itself (it is for analysing the detector).
+struct TypingStatsView: View {
+    @ObservedObject private var observer = Observer.shared
+    @ObservedObject private var typing = Observer.shared.typing
     @State private var confirmDelete = false
     @AppStorage("statsShowWeek") private var showWeek = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("", selection: $showWeek) {
-                Text("Сегодня").tag(false)
-                Text("7 дней").tag(true)
+            HStack {
+                Spacer()
+                Segments(items: [(false, "Сегодня"), (true, "7 дней")], selection: $showWeek)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 170)
-            StatsView(stats: showWeek ? typing.weekStats : typing.stats)
+            JournalNumbers(stats: showWeek ? typing.weekStats : typing.stats)
 
             if !typing.recentFixes.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
@@ -68,8 +44,9 @@ private struct StatsPanel: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(16)
-        .frame(width: 420)
+        .toggleStyle(LightSwitchStyle())
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .alert("Удалить весь журнал (и слова)?", isPresented: $confirmDelete) {
             Button("Удалить", role: .destructive) { observer.deleteJournal() }
             Button("Отмена", role: .cancel) {}
@@ -77,7 +54,7 @@ private struct StatsPanel: View {
     }
 }
 
-private struct StatsView: View {
+private struct JournalNumbers: View {
     let stats: DayStats
 
     var body: some View {

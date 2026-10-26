@@ -576,6 +576,14 @@ final class YoficatorTests: XCTestCase {
         XCTAssertNil(Yoficator(dictionary: Data()).restore("еще"))
     }
 
+    /// Dictated text: every word, punctuation and spacing kept, "все" left alone.
+    func testRestoresWholeText() {
+        let dictionary = Yoficator(dictionary: Data("артём\nещё\nлёгкий\n".utf8))
+        XCTAssertEqual(dictionary.restoreText("Еще раз, Артем: все легкий-легкий!"), "Ещё раз, Артём: все лёгкий-лёгкий!")
+        XCTAssertEqual(dictionary.restoreText(""), "")
+        XCTAssertEqual(dictionary.restoreText("hello, мир"), "hello, мир")
+    }
+
     /// Every form in the file is found again (the sort order matches the search).
     func testWholeDictionaryIsSearchable() throws {
         let url = try XCTUnwrap(Bundle.main.url(forResource: "yo", withExtension: "txt"))

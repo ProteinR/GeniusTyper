@@ -2,7 +2,7 @@ import AVFoundation
 
 /// Records the default microphone into 16 kHz mono samples (what Parakeet and Whisper take).
 /// The audio engine exists only while recording: built on start, torn down on stop, so idle
-/// Diktant holds no audio resources and the microphone indicator goes off.
+/// Genius Typer holds no audio resources and the microphone indicator goes off.
 final class AudioRecorder {
     static let sampleRate: Double = 16_000
 
@@ -30,7 +30,7 @@ final class AudioRecorder {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw NSError(domain: "Diktant", code: 1, userInfo: [NSLocalizedDescriptionKey: String(localized: "Нет микрофона")])
+            throw NSError(domain: "GeniusTyper", code: 1, userInfo: [NSLocalizedDescriptionKey: String(localized: "Нет микрофона")])
         }
         converter = AVAudioConverter(from: format, to: outputFormat)
         lock.withLock { samples.removeAll(keepingCapacity: false); samples.reserveCapacity(Int(Self.sampleRate) * 20) }

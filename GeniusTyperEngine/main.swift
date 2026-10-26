@@ -1,13 +1,13 @@
-// DiktantEngine: runs Parakeet TDT 0.6B v3 (FluidAudio, Neural Engine) for Diktant in a process of
+// GeniusTyperEngine: runs Parakeet TDT 0.6B v3 (FluidAudio, Neural Engine) for Genius Typer in a process of
 // its own. Loading the model leaves ~30 MB of fragmented malloc memory that macOS never takes back
-// from a process that keeps running; this process exits when Diktant unloads the model, so all of
-// it goes back. Diktant itself does not link FluidAudio.
+// from a process that keeps running; this process exits when Genius Typer unloads the model, so all of
+// it goes back. Genius Typer itself does not link FluidAudio.
 //
 // Modes (one JSON object per line on stdout):
 //   download   → {"progress": 0.42} … {"done": true} | {"error": "…"}
 //   serve      → {"ready": true, "seconds": 0.17} | {"error": "…"}, then for each request on stdin
 //                (UInt32 little-endian sample count + Float32 samples, 16 kHz mono) one
-//                {"text": "…", "seconds": 0.07} | {"error": "…"}. Exits when stdin closes (Diktant
+//                {"text": "…", "seconds": 0.07} | {"error": "…"}. Exits when stdin closes (Genius Typer
 //                unloaded the model, or quit or crashed).
 import FluidAudio
 import Foundation
@@ -81,6 +81,6 @@ case "serve":
     exit(0)
 
 default:
-    FileHandle.standardError.write("usage: DiktantEngine download | serve\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: GeniusTyperEngine download | serve\n".data(using: .utf8)!)
     exit(2)
 }

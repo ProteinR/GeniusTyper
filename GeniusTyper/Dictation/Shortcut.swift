@@ -86,7 +86,7 @@ struct Shortcut: Codable, Equatable {
     ].map(UInt16.init))
 
     /// Settings key.
-    static let defaultsKey = "shortcut"
+    static let defaultsKey = "dictationShortcut"
 
     /// "Голосовые из Telegram": ⌃⌥V.
     static let voicesDefaultsKey = "voicesShortcut"

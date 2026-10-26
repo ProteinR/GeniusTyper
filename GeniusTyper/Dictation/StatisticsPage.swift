@@ -3,7 +3,7 @@ import SwiftUI
 /// Words, dictations, speed and time saved; words per day; by app and by model. Totals come from
 /// SQLite; the bars are plain shapes (no Swift Charts or Canvas: on macOS 26 they took ~100 MB of
 /// graphics memory in MXCtl).
-struct StatisticsPage: View {
+struct DictationStatsView: View {
     enum Period: String, CaseIterable, Identifiable {
         case week, month, all
         var id: String { rawValue }
@@ -35,21 +35,7 @@ struct StatisticsPage: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     Spacer()
-                    HStack(spacing: 2) {
-                        ForEach(Period.allCases) { item in
-                            Button { period = item } label: {
-                                Text(item.title)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 4)
-                                    .foregroundStyle(period == item ? Color.white : Color.primary)
-                                    .background(period == item ? Color.accentColor : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(2)
-                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                    Segments(items: Period.allCases.map { ($0, $0.title) }, selection: $period)
                 }
                 HStack(spacing: 10) {
                     Metric(value: stats.words.formatted(), title: "слов")

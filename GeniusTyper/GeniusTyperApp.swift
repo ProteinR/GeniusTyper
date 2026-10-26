@@ -23,7 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController?
     private static weak var shared: AppDelegate?
 
-    /// The panel (the app's settings), e.g. from the gear in the clipboard history.
+    /// The left-click panel, e.g. from the gear in the clipboard history.
     @MainActor static func showPanel() { shared?.statusItem?.showPanel() }
     @MainActor static func closePanel() { shared?.statusItem?.closePanel() }
 
@@ -55,15 +55,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard !Self.isRunningTests else { return }
+        // Before anything reads the settings or the data folders.
+        Migration.run()
+        Prefs.register()
+        // Writing to the dictation engine helper after it died must fail with an error, not kill the app.
+        signal(SIGPIPE, SIG_IGN)
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        Log.info("Genius Typer \(Self.appVersion) (\(build)) started")
+        Log.info("Genius Typer \(Self.appVersion) (\(build)) started; dictation \(Prefs.dictationEnabled ? "on, engine \(EngineStore.shared.selected.rawValue), key \(HotkeyMonitor.shared.shortcut.title)" : "off")")
         Self.shared = self
         statusItem = StatusItemController(
             image: Self.menuBarImage, title: "Genius Typer",
-            content: { AnyView(MenuView().environmentObject(Observer.shared)) },
             menuItems: { [weak self] in self?.contextMenuItems() ?? [] })
         Observer.shared.start()
         ClipboardStore.shared.start()
+        Dictation.shared.onPhase = { MenuBarIcon.shared.dictationPhase = $0 }
+        if Prefs.dictationEnabled {
+            Dictation.shared.start()
+            let store = EngineStore.shared
+            if store.selected.isLocal, store.local == .missing { store.downloadLocal() }
+            if AudioRecorder.permission == .notDetermined { Task { _ = await AudioRecorder.requestPermission() } }
+        }
 
         let arguments = CommandLine.arguments
         if arguments.contains("--panel-test") {
@@ -73,6 +84,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { ClipboardWindow.runTest() }
         }
         if arguments.contains("--stress-test") { runStressTest() }
+        if arguments.contains("--dictation-stress-test") { runDictationStressTest() }
+        // `--open-settings [general|typing|clipboard|dictation|history|statistics]`: for screenshots.
+        if let index = arguments.firstIndex(of: "--open-settings") {
+            let page = arguments.dropFirst(index + 1).first.flatMap(SettingsPage.init(rawValue:))
+            SettingsWindow.shared.show(page: page)
+        }
+        // `--menu [voices|history]`: the left-click panel, optionally with a side column open.
+        if let index = arguments.firstIndex(of: "--menu") {
+            let side = arguments.dropFirst(index + 1).first
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.statusItem?.showPanel(side: side) }
+        }
+        if arguments.contains("--indicator-demo") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { Indicator.shared.demo() }
+        }
+        if arguments.contains("--voices") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { VoicePanel.shared.show() }
+        }
+        if let index = arguments.firstIndex(of: "--transcribe-file"), index + 1 < arguments.count {
+            transcribeFile(arguments[index + 1])
+        }
+        Memory.giveBackSoon()
     }
 
     /// `--stress-test`: three rounds of opening the panel 10 times and the clipboard history 10 times
@@ -129,42 +161,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Caps Lock goes back to normal when Genius Typer is not running.
         Observer.shared.stop()
         ClipboardStore.shared.flush()
+        Log.info("Genius Typer quit")
     }
 
     /// Right click on the icon, above "Завершить".
     @MainActor private func contextMenuItems() -> [NSMenuItem] {
-        let observer = Observer.shared
-        let auto = NSMenuItem(title: "Автопереключение", action: #selector(toggleAutoFix), keyEquivalent: "")
-        auto.target = self
-        auto.state = observer.autoFix ? .on : .off
-        let pause = NSMenuItem(title: "Пауза наблюдения", action: #selector(togglePause), keyEquivalent: "")
-        pause.target = self
-        pause.state = observer.paused ? .on : .off
-        let exceptions = NSMenuItem(title: "Исключения…", action: #selector(showExceptions), keyEquivalent: "")
-        exceptions.target = self
-        let stats = NSMenuItem(title: "Статистика…", action: #selector(showStats), keyEquivalent: "")
-        stats.target = self
-        var items = [auto, pause, .separator(), exceptions, stats]
+        let fixing = NSMenuItem(title: "Исправлять текст", action: #selector(toggleFixing), keyEquivalent: "")
+        fixing.target = self
+        fixing.state = Observer.shared.paused ? .off : .on
+        var items = [fixing, .separator()]
         if ClipboardStore.shared.enabled {
             let history = NSMenuItem(title: "История буфера", action: #selector(showClipboard), keyEquivalent: "")
             history.target = self
             items.append(history)
         }
+        if Prefs.dictationEnabled {
+            let history = NSMenuItem(title: "История диктовок…", action: #selector(showDictationHistory), keyEquivalent: "")
+            history.target = self
+            items.append(history)
+        }
+        let settings = NSMenuItem(title: "Настройки…", action: #selector(showSettings), keyEquivalent: ",")
+        settings.target = self
+        items.append(settings)
         return items
     }
 
-    @MainActor @objc private func showStats() { StatsWindow.show() }
-
-    @MainActor @objc private func showExceptions() { ExceptionsEditor.show() }
-
+    @MainActor @objc private func showSettings() { SettingsWindow.shared.show() }
+    @MainActor @objc private func showDictationHistory() { SettingsWindow.shared.show(page: .history) }
     @MainActor @objc private func showClipboard() { ClipboardWindow.show() }
-
-    @MainActor @objc private func toggleAutoFix() { Observer.shared.autoFix.toggle() }
-    @MainActor @objc private func togglePause() { Observer.shared.paused.toggle() }
+    @MainActor @objc private func toggleFixing() { Observer.shared.paused.toggle() }
 }
 
-/// Memory freed by a closed window goes back to macOS (malloc keeps it for reuse otherwise, and
-/// Activity Monitor goes on showing it).
+/// Memory freed by a closed window or an unloaded model goes back to macOS (malloc keeps it for
+/// reuse otherwise, and Activity Monitor goes on showing it).
 enum Memory {
     @MainActor
     static func giveBackSoon() {

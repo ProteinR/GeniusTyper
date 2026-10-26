@@ -7,7 +7,7 @@ import Carbon.HIToolbox
 /// (not every typed key); a key combination is a Carbon hot key (no tap at all). Every key is
 /// watched only while recording, for Esc (cancel) and for "the modifier was part of a shortcut".
 /// The taps are active ones (they pass everything through), so they need Accessibility only, which
-/// Diktant needs anyway to paste; a listen-only tap would also need Input Monitoring.
+/// Genius Typer needs anyway to paste (its typing observer has Input Monitoring too).
 @MainActor
 final class HotkeyMonitor {
     static let shared = HotkeyMonitor()
@@ -33,26 +33,42 @@ final class HotkeyMonitor {
 
     var isInstalled: Bool { modifierTap != nil || hotKeyRef != nil }
 
+    private(set) var isRunning = false
+    private var accessibilityObserver: NSObjectProtocol?
+
     func start() {
+        isRunning = true
         install()
         installVoices()
+        guard accessibilityObserver == nil else { return }
         // Accessibility granted later: install then (the notification is posted on every change).
-        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.accessibility.api"),
-                                                            object: nil, queue: .main) { [weak self] _ in
+        accessibilityObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"), object: nil, queue: .main) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 MainActor.assumeIsolated {
-                    guard let self, !self.isInstalled || self.shortcut.isModifierOnly && self.modifierTap == nil else { return }
+                    guard let self, self.isRunning,
+                          !self.isInstalled || self.shortcut.isModifierOnly && self.modifierTap == nil else { return }
                     self.install()
                 }
             }
         }
     }
 
+    /// Dictation turned off in the settings: no tap and no hot keys are left.
+    func stop() {
+        isRunning = false
+        watchKeys(false)
+        uninstall()
+        if let voicesRef { UnregisterEventHotKey(voicesRef) }
+        voicesRef = nil
+        modifierDown = false
+    }
+
     func setShortcut(_ new: Shortcut) {
         shortcut = new
         new.save()
         Log.info("Dictation key: \(new.title)", "keys")
-        install()
+        if isRunning { install() }
     }
 
     /// (Re)installs the watcher for the current key.
@@ -126,6 +142,8 @@ final class HotkeyMonitor {
     /// Carbon hot key ids: the dictation key (when it is a combination) and "Голосовые из Telegram".
     private static let dictationID: UInt32 = 1
     private static let voicesID: UInt32 = 2
+    /// The clipboard history's hot key (`HotKey`) has its own handler: each handles its own signature.
+    nonisolated static let signature = OSType(0x444B_5459) // "DKTY"
 
     /// One handler for both hot keys; it tells them apart by id.
     private func installHotKeyHandler() {
@@ -137,6 +155,7 @@ final class HotkeyMonitor {
             var hotKey = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
                               MemoryLayout<EventHotKeyID>.size, nil, &hotKey)
+            guard hotKey.signature == HotkeyMonitor.signature else { return OSStatus(eventNotHandledErr) }
             let id = hotKey.id
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
@@ -162,7 +181,7 @@ final class HotkeyMonitor {
         if flags.contains(.option) { carbon |= UInt32(optionKey) }
         if flags.contains(.control) { carbon |= UInt32(controlKey) }
         var ref: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: OSType(0x444B_5459), id: id) // "DKTY"
+        let hotKeyID = EventHotKeyID(signature: Self.signature, id: id)
         let status = RegisterEventHotKey(UInt32(shortcut.keyCode), carbon, hotKeyID, GetApplicationEventTarget(), 0, &ref)
         if status == noErr {
             Log.info("Hot key \(shortcut.title) registered", "keys")
@@ -179,8 +198,11 @@ final class HotkeyMonitor {
     private(set) var voicesShortcut = Shortcut.load(key: Shortcut.voicesDefaultsKey, default: .voicesDefault)
     private var voicesRef: EventHotKeyRef?
 
+    /// Also when "Голосовые из Telegram" is switched on or off.
     func installVoices() {
         if let voicesRef { UnregisterEventHotKey(voicesRef) }
+        voicesRef = nil
+        guard isRunning, Prefs.voicesEnabled else { return }
         voicesRef = register(voicesShortcut, id: Self.voicesID)
     }
 

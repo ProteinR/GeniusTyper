@@ -43,12 +43,12 @@ enum Words {
     }
 }
 
-/// The history in SQLite (`~/Library/Application Support/Diktant/history.sqlite`). Nothing is kept
+/// The history in SQLite (`~/Library/Application Support/GeniusTyper/dictation/history.sqlite`). Nothing is kept
 /// in memory: the database is opened for each operation, pages of the list and the statistics'
 /// totals are computed by SQLite.
 final class History {
     static let shared = History(url: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("Diktant/history.sqlite"))
+        .appendingPathComponent("GeniusTyper/dictation/history.sqlite"))
 
     let url: URL
 

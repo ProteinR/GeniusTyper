@@ -56,9 +56,9 @@ struct LoginItemToggle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Toggle("Запуск при входе", isOn: Binding(get: { item.isEnabled || item.needsApproval },
+            Toggle("Запускать при входе", isOn: Binding(get: { item.isEnabled || item.needsApproval },
                                                                    set: { item.set($0) }))
-                .help("Запускать Genius Typer при входе в систему, чтобы наблюдение шло и после перезагрузки")
+                .help("Запускать Genius Typer при входе в систему, чтобы всё работало и после перезагрузки")
             if item.needsApproval {
                 Button("Разрешите Genius Typer в настройках «Объекты входа»") { item.openSettings() }
                     .buttonStyle(.link)

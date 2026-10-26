@@ -1,28 +1,37 @@
 import AVFoundation
 import SwiftUI
 
-struct GeneralPage: View {
-    @AppStorage("sounds") private var sounds = true
+/// Диктовка: the switch, the key and how recording behaves, the model (on this Mac or by API) and
+/// the Telegram voice messages. While dictation is off the rest is grey and nothing records.
+struct DictationPage: View {
+    @AppStorage("dictationEnabled") private var enabled = false
+    @AppStorage("dictationSounds") private var sounds = true
     @AppStorage("escCancels") private var escCancels = true
+    @AppStorage("dictationYo") private var yo = true
+    @AppStorage("voicesEnabled") private var voices = true
     @AppStorage("mascot") private var mascot = Mascot.none.rawValue
-    @State private var accessibility = Paster.isTrusted
-    @State private var microphone = AudioRecorder.permission
 
     var body: some View {
         Form {
-            Section("Диктовка") {
+            Section {
+                ModuleSwitch(title: "Диктовка",
+                             detail: enabled ? "Говорите — текст вставляется в приложение, где стоит курсор"
+                                             : "Пока выключено, приложение не трогает микрофон и не загружает модель",
+                             isOn: Binding(get: { enabled }, set: { Dictation.shared.setEnabled($0) }))
+            }
+            Section("Запись") {
                 ShortcutRow(kind: .dictation)
-                Toggle(isOn: $sounds) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Звуки диктовки")
-                        Text("Начало записи, вставка текста, ошибка").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
                 Toggle(isOn: $escCancels) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Esc отменяет запись")
-                        Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
-                    }
+                    Text("Esc отменяет запись")
+                    Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
+                }
+                Toggle(isOn: $sounds) {
+                    Text("Звуки")
+                    Text("Начало записи, вставка текста, ошибка").font(.caption).foregroundStyle(.secondary)
+                }
+                Toggle(isOn: $yo) {
+                    Text("Ставить ё в надиктованном")
+                    Text("Модель почти всегда пишет «е»: «еще» → «ещё», как при наборе").font(.caption).foregroundStyle(.secondary)
                 }
                 LabeledContent {
                     HStack(spacing: 6) {
@@ -41,76 +50,51 @@ struct GeneralPage: View {
                     Text("Персонаж над индикатором печатает, пока вы говорите").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            .active(enabled)
+            ModelSections()
+                .active(enabled)
             Section {
+                Toggle(isOn: Binding(get: { voices }, set: { voices = $0; HotkeyMonitor.shared.installVoices() })) {
+                    Text("Голосовые из Telegram")
+                    Text("Расшифровка последних голосовых: в панели по клику на значок и по сочетанию клавиш")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 ShortcutRow(kind: .voices)
-            } header: {
-                Text("Голосовые из Telegram")
+                    .active(voices)
             } footer: {
-                Text("Показывает расшифровку последних голосовых из Telegram. Чтобы туда не попадали голосовые из групп, в Telegram → Настройки → Данные и память → Автозагрузка медиа оставьте голосовые только для личных чатов.")
+                Text("Голосовые берутся из кеша приложения Telegram. Чтобы туда не попадали голосовые из групп, в Telegram → Настройки → Данные и память → Автозагрузка медиа оставьте голосовые только для личных чатов.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if !accessibility || microphone != .authorized {
-                Section("Доступ") {
-                    if !accessibility {
-                        PermissionRow(title: "Универсальный доступ",
-                                      detail: "Нужен, чтобы видеть клавишу диктовки и вставлять текст") {
-                            Paster.askForAccessibility()
-                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
-                        }
-                    }
-                    if microphone != .authorized {
-                        PermissionRow(title: "Микрофон", detail: "Чтобы записывать голос") {
-                            if microphone == .notDetermined {
-                                Task { _ = await AudioRecorder.requestPermission(); refresh() }
-                            } else {
-                                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
-                            }
-                        }
-                    }
-                }
-            }
-            Section("Система") {
-                LoginItemToggle()
-                LabeledContent("Язык приложения") {
-                    Menu {
-                        Button("Русский") {}
-                        Button("English (позже)") {}.disabled(true)
-                    } label: {
-                        Text("Русский")
-                    }
-                    .fixedSize()
-                }
-            }
+            .active(enabled)
         }
         .formStyle(.grouped)
         .toggleStyle(LightSwitchStyle())
-        .onAppear(perform: refresh)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
-    }
-
-    private func refresh() {
-        accessibility = Paster.isTrusted
-        microphone = AudioRecorder.permission
-        if accessibility, !HotkeyMonitor.shared.isInstalled { HotkeyMonitor.shared.install() }
     }
 }
 
-private struct PermissionRow: View {
+/// A macOS permission: granted (a check) or not (a warning and a button to System Settings).
+struct PermissionRow: View {
     let title: LocalizedStringKey
     let detail: LocalizedStringKey
+    var granted = false
     let action: () -> Void
 
     var body: some View {
         HStack {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(granted ? .green : .orange)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Разрешить", action: action)
+            if granted {
+                Text("Есть").foregroundStyle(.secondary)
+            } else {
+                Button("Разрешить", action: action)
+            }
         }
     }
 }

@@ -74,11 +74,28 @@ final class MenuBarIcon: ObservableObject {
         }
     }
 
+    /// While dictating the icon is a red microphone (an ellipsis while the text is recognised).
+    var dictationPhase: Dictation.Phase = .idle {
+        didSet { if dictationPhase != oldValue { render() } }
+    }
+
     private func render() {
         guard let button = statusItem?.button else { return }
         button.image = nil
         button.title = ""
         button.attributedTitle = NSAttributedString()
+        button.contentTintColor = nil
+        switch dictationPhase {
+        case .recording:
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: String(localized: "Genius Typer: запись"))
+            button.contentTintColor = .systemRed
+            return
+        case .transcribing:
+            button.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: String(localized: "Genius Typer: распознавание"))
+            return
+        case .idle:
+            break
+        }
         guard languageMark != .none, let language else {
             button.image = symbolImage
             return
@@ -142,37 +159,24 @@ final class MenuBarIcon: ObservableObject {
     }
 }
 
-/// The menu bar icon: left click opens the panel, right click a small menu ending with "Завершить".
+/// The menu bar icon: left click opens `QuickPanel`, right click a small menu ending with
+/// "Завершить".
 ///
 /// Made by hand rather than with SwiftUI's `MenuBarExtra`: when the icon is turned off in System
 /// Settings → Menu Bar, a `MenuBarExtra`-only app quits right after launch, and its keys stop
 /// working. An `NSStatusItem` just stays hidden; opening the app again (Spotlight, Finder) then
 /// shows the panel at the top right of the screen instead.
-///
-/// The panel is a borderless window with a menu material, not an `NSPopover`: on macOS 26 the
-/// popover's glass took ~97 MB of graphics memory while open (132 MB total vs 27 MB with this;
-/// measured with `footprint` during `--panel-test`). It is built once and kept, so it opens
-/// without building anything.
 @MainActor
 final class StatusItemController: NSObject {
     private let statusItem: NSStatusItem
-    private let content: () -> AnyView
     private let menuItems: () -> [NSMenuItem]
     private let quitTitle: String
-    private var panel: MenuPanel?
-    private var monitors: [Any] = []
-    private var spaceObserver: NSObjectProtocol?
 
-    /// `menuItems` are built on every right click (so their checkmarks are current).
-    convenience init(symbol: String, title: String, content: @escaping () -> AnyView, menuItems: @escaping () -> [NSMenuItem] = { [] }) {
-        self.init(image: NSImage(systemSymbolName: symbol, accessibilityDescription: title), title: title, content: content, menuItems: menuItems)
-    }
-
-    /// `image`: a template image drawn by the app, for an icon SF Symbols does not have.
-    init(image: NSImage?, title: String, content: @escaping () -> AnyView, menuItems: @escaping () -> [NSMenuItem] = { [] }) {
-        // Variable length: the layout text or flag (a choice in the panel) is wider than a symbol.
+    /// `image`: a template image drawn by the app; `menuItems` are built on every right click (so
+    /// their checkmarks are current).
+    init(image: NSImage?, title: String, menuItems: @escaping () -> [NSMenuItem] = { [] }) {
+        // Variable length: the layout text or flag (a choice in the settings) is wider than a symbol.
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        self.content = content
         self.menuItems = menuItems
         quitTitle = "Завершить \(title)"
         super.init()
@@ -181,93 +185,19 @@ final class StatusItemController: NSObject {
         statusItem.button?.target = self
         statusItem.button?.action = #selector(clicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        // Built ahead (the first build took ~150 ms, a visible jerk on the first opening).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            MainActor.assumeIsolated { _ = self?.makePanelIfNeeded() }
-        }
     }
-
-    var isPanelShown: Bool { panel?.isVisible == true }
 
     /// Under the icon, or at the top right of the screen when the icon is hidden.
-    func showPanel() {
-        let panel = makePanelIfNeeded()
-        panel.fitContent()
-        let size = panel.frame.size
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-        let visible = screen?.visibleFrame ?? .zero
-        var origin: NSPoint
+    /// `side`: "voices" or "history" opens that column (for `--menu`).
+    func showPanel(side: String? = nil) {
+        var anchor: NSRect?
         if isIconVisible, let button = statusItem.button, let window = button.window {
-            let icon = window.convertToScreen(button.convert(button.bounds, to: nil))
-            origin = NSPoint(x: icon.minX, y: icon.minY - 6 - size.height)
-        } else {
-            origin = NSPoint(x: visible.maxX - size.width - 12, y: visible.maxY - size.height - 12)
+            anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
         }
-        // Inside the screen.
-        origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
-        panel.setFrameOrigin(origin)
-
-        panel.alphaValue = 0
-        panel.makeKeyAndOrderFront(nil)
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.12
-            panel.animator().alphaValue = 1
-        }
-        watchForClose()
+        QuickPanel.shared.show(under: anchor == nil ? nil : statusItem.button, anchor: anchor, side: side)
     }
 
-    func closePanel() {
-        guard let panel, panel.isVisible else { return }
-        monitors.forEach(NSEvent.removeMonitor)
-        monitors.removeAll()
-        if let spaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(spaceObserver) }
-        spaceObserver = nil
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.1
-            panel.animator().alphaValue = 0
-        }, completionHandler: {
-            MainActor.assumeIsolated {
-                panel.orderOut(nil)
-                Memory.giveBackSoon()
-            }
-        })
-    }
-
-    /// A click anywhere else, Esc, or another Space closes it, like a menu.
-    private func watchForClose() {
-        guard monitors.isEmpty else { return }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown], handler: { [weak self] _ in
-            MainActor.assumeIsolated { self?.closePanel() }
-        }) { monitors.append(global) }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown], handler: { [weak self] event in
-            let isKey = event.type == .keyDown
-            let isEsc = isKey && event.keyCode == 53
-            let window = event.windowNumber
-            let consumed = MainActor.assumeIsolated { () -> Bool in
-                guard let self else { return false }
-                if isKey {
-                    if isEsc { self.closePanel(); return true }
-                    return false
-                }
-                // A click in another of our windows (the icon toggles by itself).
-                if window != self.panel?.windowNumber && window != self.statusItem.button?.window?.windowNumber { self.closePanel() }
-                return false
-            }
-            return consumed ? nil : event
-        }) { monitors.append(local) }
-        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
-                                                                          object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.closePanel() }
-        }
-    }
-
-    private func makePanelIfNeeded() -> MenuPanel {
-        if let panel { return panel }
-        let panel = MenuPanel(content: content())
-        self.panel = panel
-        return panel
-    }
+    func closePanel() { QuickPanel.shared.close() }
 
     /// Hidden with the switch, in System Settings → Menu Bar, or pushed out by a full menu bar.
     private var isIconVisible: Bool {
@@ -309,7 +239,7 @@ final class StatusItemController: NSObject {
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
             closePanel()
             showMenu()
-        } else if isPanelShown {
+        } else if QuickPanel.shared.isShown {
             closePanel()
         } else {
             showPanel()
@@ -326,76 +256,5 @@ final class StatusItemController: NSObject {
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil
-    }
-}
-
-/// The panel window: borderless, menu material, rounded, sized to its SwiftUI content.
-private final class MenuPanel: NSPanel {
-    private let host: NSHostingView<AnyView>
-
-    init(content: AnyView) {
-        host = NSHostingView(rootView: content)
-        host.sizingOptions = [.intrinsicContentSize]
-        let size = host.fittingSize
-        super.init(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel],
-                   backing: .buffered, defer: false)
-        let effect = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
-        effect.material = .menu
-        effect.state = .active
-        effect.blendingMode = .behindWindow
-        effect.wantsLayer = true
-        effect.layer?.cornerRadius = 14
-        effect.layer?.cornerCurve = .continuous
-        effect.layer?.masksToBounds = true
-        effect.autoresizingMask = [.width, .height]
-        host.frame = effect.bounds
-        host.autoresizingMask = [.width, .height]
-        effect.addSubview(host)
-        contentView = effect
-        isOpaque = false
-        backgroundColor = .clear
-        hasShadow = true
-        level = .popUpMenu
-        isReleasedWhenClosed = false
-        collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
-        host.layoutSubtreeIfNeeded()
-    }
-
-    /// Keyboard for the toggles and buttons (a borderless window cannot be key by default).
-    override var canBecomeKey: Bool { true }
-
-    /// The content may have grown (a warning, a device) since the last opening.
-    func fitContent() {
-        let size = host.fittingSize
-        if size != frame.size { setContentSize(size) }
-    }
-}
-
-/// "Значок в строке меню" for the panel. Off: the app keeps working; open it again from
-/// Spotlight or Finder to get the panel back.
-struct MenuBarIconToggle: View {
-    @ObservedObject private var icon = MenuBarIcon.shared
-
-    var body: some View {
-        Toggle("Значок в строке меню", isOn: $icon.isShown)
-            .help("Без значка приложение продолжает работать; панель открывается повторным запуском из Spotlight или Finder")
-    }
-}
-
-/// "Значок приложения" and "Язык": the language mark is small beside the symbol, or the whole icon.
-struct MenuBarIconStylePicker: View {
-    @ObservedObject private var icon = MenuBarIcon.shared
-
-    var body: some View {
-        HStack {
-            Picker("Язык на значке:", selection: $icon.languageMark) {
-                ForEach(MenuBarIcon.LanguageMark.allCases) { Text($0.title).tag($0) }
-            }
-            .fixedSize()
-            .help("Раскладка на значке заменяет системный значок языка: его можно убрать в Системных настройках → Клавиатура → Источники ввода")
-            Toggle("с иконкой", isOn: $icon.showsSymbol)
-                .disabled(icon.languageMark == .none)
-                .help("Включено: язык мелко рядом с иконкой Genius Typer. Выключено: только язык, крупно")
-        }
     }
 }

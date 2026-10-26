@@ -228,7 +228,7 @@ final class VoiceTranscripts: ObservableObject {
     private static let cacheLimit = 200
     private static var cacheURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Diktant/voice-texts.json")
+            .appendingPathComponent("GeniusTyper/dictation/voice-texts.json")
     }
 
     private static func loadCache() -> [CachedText] {

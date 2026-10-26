@@ -1,45 +1,43 @@
 import SwiftUI
 
-struct ModelPage: View {
+/// The model on the Диктовка page: the local one (download, unload) or one by API.
+struct ModelSections: View {
     @ObservedObject private var store = EngineStore.shared
 
     var body: some View {
-        Form {
-            Section("На этом Mac") {
-                LocalModelRow()
-                LabeledContent {
-                    Menu {
-                        ForEach([1, 5, 15, 60, 0], id: \.self) { minutes in
-                            Button(Self.unloadTitle(minutes)) { store.unloadAfterMinutes = minutes }
-                        }
-                    } label: {
-                        Text(Self.unloadTitle(store.unloadAfterMinutes))
+        Section("Модель на этом Mac") {
+            LocalModelRow()
+            LabeledContent {
+                Menu {
+                    ForEach([1, 5, 15, 60, 0], id: \.self) { minutes in
+                        Button(Self.unloadTitle(minutes)) { store.unloadAfterMinutes = minutes }
                     }
-                    .fixedSize()
                 } label: {
-                    Text("Выгружать модель из памяти")
-                    Text(memoryNote).font(.caption).foregroundStyle(.secondary)
+                    Text(Self.unloadTitle(store.unloadAfterMinutes))
                 }
-            }
-            Section {
-                ForEach([EngineID.groq, .openAI, .custom]) { id in
-                    CloudRow(id: id)
-                }
-            } header: {
-                Text("По API")
-            } footer: {
-                Text("Звук отправляется в сервис. Ключи хранятся в связке ключей macOS.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .fixedSize()
+            } label: {
+                Text("Выгружать модель из памяти")
+                Text(memoryNote).font(.caption).foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
         .onAppear { store.refreshLocal() }
+        Section {
+            ForEach([EngineID.groq, .openAI, .custom]) { id in
+                CloudRow(id: id)
+            }
+        } header: {
+            Text("Или через интернет, по API")
+        } footer: {
+            Text("Звук отправляется в сервис. Ключи хранятся в связке ключей macOS.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var memoryNote: String {
         switch store.local {
-        case .loaded: return String(localized: "Сейчас в памяти (отдельный процесс DiktantEngine)")
+        case .loaded: return String(localized: "Сейчас в памяти (отдельный процесс GeniusTyperEngine)")
         case .loading: return String(localized: "Загружается…")
         default: return String(localized: "Сейчас не в памяти; загружается при начале диктовки")
         }

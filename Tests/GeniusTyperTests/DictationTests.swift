@@ -1,6 +1,6 @@
 import Carbon.HIToolbox
 import XCTest
-@testable import Diktant
+@testable import GeniusTyper
 
 final class HybridPressTests: XCTestCase {
     func testHoldIsPushToTalk() {
@@ -58,7 +58,7 @@ final class ShortcutTests: XCTestCase {
     }
 
     func testSaveAndLoad() {
-        let defaults = UserDefaults(suiteName: "DiktantTests-\(UUID())")!
+        let defaults = UserDefaults(suiteName: "DictationTests-\(UUID())")!
         XCTAssertEqual(Shortcut.load(from: defaults), .rightOption)
         let combo = Shortcut(keyCode: UInt16(kVK_F5))
         combo.save(to: defaults)

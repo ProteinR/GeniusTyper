@@ -24,6 +24,23 @@ final class Dictation: ObservableObject {
     /// Shorter recordings are a slip of the finger: dropped without a sound.
     static let minimumDuration: TimeInterval = 0.3
 
+    /// The "Диктовка" switch. Off: the keys are no longer watched and the model leaves memory.
+    func setEnabled(_ on: Bool) {
+        Prefs.dictationEnabled = on
+        if on {
+            start()
+            let store = EngineStore.shared
+            if store.selected.isLocal, store.local == .missing { store.downloadLocal() }
+            if AudioRecorder.permission == .notDetermined { Task { _ = await AudioRecorder.requestPermission() } }
+        } else {
+            cancel(reason: "dictation off")
+            HotkeyMonitor.shared.stop()
+            VoicePanel.shared.close()
+            EngineStore.shared.unloadNow()
+        }
+        Log.info("Dictation \(on ? "on" : "off")", "dictation")
+    }
+
     func start() {
         let keys = HotkeyMonitor.shared
         keys.onPress = { [weak self] in self?.keyDown() }
@@ -112,7 +129,8 @@ final class Dictation: ObservableObject {
             do {
                 let raw = try await EngineStore.shared.transcribe(samples)
                 guard !Task.isCancelled else { return }
-                let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                let text = Prefs.dictationYo ? Yoficator.shared.restoreText(trimmed) : trimmed
                 Log.info(String(format: "Transcribed %.1f s of audio in %.2f s: %d words", duration,
                                 Date().timeIntervalSince(start), Words.count(text)), "dictation")
                 phase = .idle
@@ -153,7 +171,7 @@ final class Dictation: ObservableObject {
     }
 }
 
-/// Short sounds (switch "Звуки диктовки"): start, text pasted (a soft ding of our own,
+/// Short sounds (switch "Звуки"): start, text pasted (a soft ding of our own,
 /// `scripts/make-sounds.swift`), failure (nothing recognised, error, no paste), Esc.
 enum Sounds {
     enum Kind { case start, success, failure, cancel }

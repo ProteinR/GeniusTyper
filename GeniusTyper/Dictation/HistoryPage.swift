@@ -2,6 +2,8 @@ import SwiftUI
 
 /// The history, newest first, read from SQLite a page at a time as the list scrolls.
 struct HistoryPage: View {
+    @ObservedObject var navigation: SettingsWindow.Navigation
+    @AppStorage("dictationEnabled") private var dictation = false
     @State private var search = ""
     @State private var items: [HistoryEntry] = []
     @State private var hasMore = true
@@ -11,6 +13,15 @@ struct HistoryPage: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if !dictation {
+                HStack {
+                    Text("Диктовка выключена: новые тексты сюда не попадают.").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Включить…") { navigation.page = .dictation }
+                }
+                .font(.callout)
+                .padding([.horizontal, .top], 12)
+            }
             TextField("Поиск по истории", text: $search)
                 .textFieldStyle(.roundedBorder)
                 .padding(12)
@@ -18,7 +29,7 @@ struct HistoryPage: View {
             if items.isEmpty {
                 VStack(spacing: 6) {
                     Image(systemName: "text.bubble").font(.title).foregroundStyle(.secondary)
-                    Text(search.isEmpty ? "Здесь появятся ваши диктовки" : "Ничего не найдено")
+                    Text(search.isEmpty ? "Здесь появятся надиктованные тексты" : "Ничего не найдено")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

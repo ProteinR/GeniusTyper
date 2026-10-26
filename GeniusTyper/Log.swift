@@ -2,8 +2,10 @@ import Foundation
 import os
 
 /// Detailed logging to two places:
-/// - `~/Library/Logs/GeniusTyper/geniustyper.log` (plain text, rotated at 5 MB, kept as `geniustyper.1.log`),
-///   easy to read, attach or `tail -f`;
+/// - `~/Library/Logs/GeniusTyper/geniustyper.log` (plain text, rotated at 1 MB, kept as `geniustyper.1.log`, so
+///   at most ~2 MB on disk), easy to read, attach or `tail -f`. Debug lines go there only when
+///   verbose: `defaults write com.dmemruk.GeniusTyper verboseLog -bool true` (then restart), or any
+///   `--…-test` launch argument (the performance checks read their debug lines);
 /// - the unified system log, subsystem `com.dmemruk.GeniusTyper`
 ///   (`log stream --predicate 'subsystem == "com.dmemruk.GeniusTyper"'`).
 enum Log {
@@ -21,7 +23,11 @@ enum Log {
         return dir.appendingPathComponent("geniustyper.log")
     }()
 
-    private static let maxFileSize = 5 * 1024 * 1024
+    private static let maxFileSize = 1024 * 1024
+
+    /// Debug lines (hotkey presses, audio levels, timings) into the file too.
+    static let verbose = UserDefaults.standard.bool(forKey: "verboseLog")
+        || CommandLine.arguments.contains { $0.hasPrefix("--") && $0.hasSuffix("-test") }
     private static let queue = DispatchQueue(label: "com.dmemruk.GeniusTyper.log")
     private static let osLog = Logger(subsystem: "com.dmemruk.GeniusTyper", category: "app")
     private static let timestamp: DateFormatter = {
@@ -58,6 +64,7 @@ enum Log {
         case .warning: osLog.warning("[\(category, privacy: .public)] \(message, privacy: .public)")
         case .error: osLog.error("[\(category, privacy: .public)] \(message, privacy: .public)")
         }
+        guard level != .debug || verbose else { return }
         queue.async {
             let line = "\(timestamp.string(from: date)) \(level.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)) [\(category)] (\(thread)) \(message)\n"
             append(line)

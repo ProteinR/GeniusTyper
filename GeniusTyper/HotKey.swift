@@ -8,6 +8,7 @@ enum HotKey {
     private static var ref: EventHotKeyRef?
     private static var handlerRef: EventHandlerRef?
     private static var action: (() -> Void)?
+    nonisolated static let signature = OSType(0x4753_4B59)  // "GSKY"
 
     /// False when the combination could not be registered (another app holds it).
     static func register(keyCode: UInt32, modifiers: NSEvent.ModifierFlags, action: @escaping () -> Void) -> Bool {
@@ -15,7 +16,13 @@ enum HotKey {
         Self.action = action
         if handlerRef == nil {
             var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-            InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
+            // The dictation hot keys (`HotkeyMonitor`) have their own handler on the same target:
+            // each one handles only its own signature and passes the others on.
+            InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+                var hotKey = EventHotKeyID()
+                GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                                  MemoryLayout<EventHotKeyID>.size, nil, &hotKey)
+                guard hotKey.signature == HotKey.signature else { return OSStatus(eventNotHandledErr) }
                 DispatchQueue.main.async { MainActor.assumeIsolated { HotKey.action?() } }
                 return noErr
             }, 1, &type, nil, &handlerRef)
@@ -25,7 +32,7 @@ enum HotKey {
         if modifiers.contains(.shift) { carbon |= UInt32(shiftKey) }
         if modifiers.contains(.option) { carbon |= UInt32(optionKey) }
         if modifiers.contains(.control) { carbon |= UInt32(controlKey) }
-        let id = EventHotKeyID(signature: OSType(0x4753_4B59), id: 1)  // "GSKY"
+        let id = EventHotKeyID(signature: signature, id: 1)
         let status = RegisterEventHotKey(keyCode, carbon, id, GetApplicationEventTarget(), 0, &ref)
         if status != noErr {
             Log.info("Hot key \(keyCode) not registered: \(status)", "clipboard")

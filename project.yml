@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.11.0"
-    CURRENT_PROJECT_VERSION: "15"
+    MARKETING_VERSION: "0.12.0"
+    CURRENT_PROJECT_VERSION: "16"
     # No Apple Developer account: ad-hoc signing, no hardened runtime (scripts/install.sh re-signs
     # with the local certificate so the Input Monitoring permission survives rebuilds).
     DEVELOPMENT_TEAM: ""
@@ -16,21 +16,38 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     ENABLE_HARDENED_RUNTIME: NO
     MACOSX_DEPLOYMENT_TARGET: "15.0"
+    SWIFT_EMIT_LOC_STRINGS: YES
+packages:
+  # Parakeet on the Neural Engine for dictation, linked only into GeniusTyperEngine. No traits: TTS,
+  # diarization and the NeMo text normalizer are left out (only ASR is needed).
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio
+    from: 0.17.7
+    traits: []
 targets:
   GeniusTyper:
     type: application
     platform: macOS
     sources:
       - GeniusTyper
+    dependencies:
+      # The dictation model runs in this helper (Contents/MacOS/GeniusTyperEngine), see
+      # GeniusTyperEngine/main.swift.
+      - target: GeniusTyperEngine
+        embed: true
+        copy:
+          destination: executables
     info:
       path: GeniusTyper/Info.plist
       properties:
         CFBundleDisplayName: Genius Typer
         CFBundleDevelopmentRegion: ru
+        # English is planned: add translations to Localizable.xcstrings and "en" here.
         CFBundleLocalizations: [ru]
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.productivity
+        NSMicrophoneUsageDescription: Genius Typer записывает голос, пока вы диктуете, и превращает его в текст.
         # Menu bar only, no Dock icon.
         LSUIElement: true
     settings:
@@ -43,7 +60,19 @@ targets:
     scheme:
       testTargets:
         - GeniusTyperTests
-  # Unit tests of the pure logic: word tracking, rewrites and the detector.
+  # Runs Parakeet in its own process, which exits when the model is unloaded.
+  GeniusTyperEngine:
+    type: tool
+    platform: macOS
+    sources:
+      - GeniusTyperEngine
+    dependencies:
+      - package: FluidAudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.GeniusTyperEngine
+        SKIP_INSTALL: YES
+  # Unit tests of the pure logic: word tracking, rewrites, the detector, the dictation key, history and statistics.
   GeniusTyperTests:
     type: bundle.unit-test
     platform: macOS
