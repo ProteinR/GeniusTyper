@@ -180,17 +180,26 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   (line 2.7 % against 2.8 %, WindowServer within noise).
   **Adaptive scale** (`LevelScale`, asked 2026-10-27: with AirPods nearly every word filled the
   bar): the bars show a 15 dB window hanging 2 dB below the loud speech of the last seconds (peak:
-  up at once, down 0.4 dB/s while speaking, frozen in pauses), cut at the background (down at once,
+  up at once, down 0.4 dB/s while speaking, 30 dB/s while the voice is 2 dB below the window,
+  frozen in pauses), cut at the background (down at once,
   up 0.8 dB/s), at least 8 dB wide; the mascot's "loud" is on the same scale. Learnt per microphone
-  (input name) and kept in `levelScales` when a dictation with ≥1 s of speech ends, so the next one
-  starts calibrated; the demo and `--indicator-test` use `LevelScale.standard` (= `LevelBars`) and
+  (input name) and kept in `levelScales` when a dictation with ≥1 s of speech (4 dB over the
+  background, `isSpeech`, not by the bars) ends, so the next one
+  starts calibrated. 2026-10-27: one loud sound kept a peak of 0.91 for the MacBook microphone
+  (speech 0.15–0.37), the line stayed flat in every dictation and, as speech was then counted by
+  the bars, the scale was never kept again; now the voice shows within ~2 s and the scale heals
+  itself. The demo and `--indicator-test` use `LevelScale.standard` (= `LevelBars`) and
   keep nothing. `LevelScaleTests`: the owner's levels as recorded, 10 dB louder over noise and 4 dB
   quieter give alike bars (median 0.6–0.85, ≤12 % at the top; the fixed scale put 48 % of the
   louder ones at the top). The log has "Level scale for <mic>" after each dictation.
   **Level style** (`LevelStyle`, Диктовка → Индикатор, asked 2026-10-26 after an interactive
   preview of six): "Полоски" (above, default), "Плотная волна" (28 thin bars scrolling, a dotted
   line in silence, like Voice Memos) and "Линия" (a smooth oscilloscope line that swings with the
-  voice; its own 60 fps timer only while recording, the speed of the preview; a `CAShapeLayer`
+  voice; since 2026-10-27 its crests are 18 pt apart, move left with the sound and keep their
+  height, which is the amplitude, `LevelScale.amplitude`, not the bars' loudness: speech swings
+  about half way, stressed syllables to the top; asked after a recording and an interactive
+  preview against the old line, whose crests ran at their own speed and were nearly all full
+  height; its own 60 fps timer only while recording, the speed of the preview; a `CAShapeLayer`
   gets a new path each frame and the view is never redrawn: ~3 % CPU, ~9.5 % when it was drawn in
   `draw(_:)`; stopped on hide). The bars and the wave are one `CALayer` per bar, no `draw(_:)`
   either, and since 2026-10-27 move on the same 60 fps timer (asked: jumping once per level, 12

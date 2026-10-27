@@ -66,8 +66,10 @@ final class Indicator {
         let level = CGFloat(value)
         scale.update(level, elapsed: elapsed)
         let loudness = scale.loudness(level)
-        if loudness > 0.3 { speechSeconds += elapsed }
-        pill.bars.push(loudness)
+        // Speech by the floor, not by what the bars show: a scale whose peak is far above the voice
+        // shows nothing, and it must still be kept once it has come down.
+        if scale.isSpeech(level) { speechSeconds += elapsed }
+        pill.bars.push(level, scale: scale)
         mascot?.heard(loud: loudness > 0.8)
     }
 
@@ -272,7 +274,10 @@ private final class PillView: NSView {
 /// Bars: newest on the right; a flat white line until the first sound (asked 2026-10-26: dots,
 /// dim bars and bars filling in one by one all read as "wait, loading"), then bars to the end,
 /// the quiet ones short bars, not dots. Wave: 28 thin bars scrolling, like Voice Memos. Line: a
-/// smooth oscilloscope line that swings with the voice. All three move 60 times a second while
+/// smooth oscilloscope line that swings with the voice; its crests (18 pt apart) move left with
+/// the sound and keep their height, which is the amplitude, so loud and quiet syllables differ
+/// (asked 2026-10-27: crests that ran at their own speed on `loudness` were all full height, the
+/// line looked the same for any speech). All three move 60 times a second while
 /// recording (the line at 30 moved half as fast as the preview the owner chose, 2026-10-26; bars
 /// and wave jumping 12 times a second, once per level, looked late and jerky next to the line,
 /// 2026-10-27): the bars and the wave glide left at a steady speed, the newest one on the right
@@ -287,12 +292,16 @@ private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
     static let lineHeight: CGFloat = 2
+    /// Points from one point of the line to the next, and from one crest to the next.
+    static let lineStep: CGFloat = 1.3
+    static let crestSpacing: CGFloat = 18
 
     private var style = LevelStyle.bars
     private var heardSound = false
     private var smooth: CGFloat = 0
     private var target: CGFloat = 0
-    private var phase: CGFloat = 0
+    /// Frames of the line so far: its wave is fixed to the trace, so each crest moves with it.
+    private var frames = 0
     private var trace: [CGFloat] = []
     /// Loudness 0…1 of the bars, oldest first: one more than fit, the newest coming in on the right.
     private var columns: [CGFloat] = []
@@ -390,10 +399,12 @@ private final class BarsView: NSView {
         startAnimating()
     }
 
-    /// How loud, 0…1 of the height (`LevelScale.loudness`).
-    func push(_ loudness: CGFloat) {
-        if loudness > 0 { heardSound = true }
-        target = loudness
+    /// The microphone level: 0…1 of the height on `scale`, its loudness for the bars and the
+    /// wave, its amplitude for the line.
+    func push(_ level: CGFloat, scale: LevelScale) {
+        let value = style == .line ? scale.amplitude(level) : scale.loudness(level)
+        if value > 0 { heardSound = true }
+        target = value
     }
 
     func stopAnimating() {
@@ -426,7 +437,7 @@ private final class BarsView: NSView {
         switch style {
         case .line:
             let flat = smooth == 0 && trace.allSatisfy { $0 == 0 }
-            phase += 0.12 + smooth * 0.3
+            frames += 1
             trace.removeFirst()
             trace.append(smooth)
             if !flat { updateLine() }
@@ -449,8 +460,10 @@ private final class BarsView: NSView {
         guard let lineLayer else { return }
         let midY = bounds.height / 2
         let path = CGMutablePath()
+        let first = CGFloat(frames - trace.count + 1)
         for (index, value) in trace.enumerated() {
-            let point = CGPoint(x: 1 + CGFloat(index) * 1.3, y: midY + value * (Self.maxHeight / 2 - 2) * sin(CGFloat(index) * 0.9 + phase * 2))
+            let wave = sin((first + CGFloat(index)) * Self.lineStep / Self.crestSpacing * 2 * .pi)
+            let point = CGPoint(x: 1 + CGFloat(index) * Self.lineStep, y: midY + value * (Self.maxHeight / 2 - 2) * wave)
             if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
         }
         CATransaction.begin()
@@ -537,8 +550,9 @@ enum LevelBars {
 /// close to the mouth and with their own processing, nearly every word filled the bar on the
 /// fixed `LevelBars` scale, tuned on the MacBook microphone). Levels are 40 dB per 1.0
 /// (`AudioRecorder.level`). The bars show a 15 dB window (as `LevelBars`) hanging from the loud
-/// speech of the last seconds (`peak`: rises at once, sinks 0.4 dB a second while speaking, never in
-/// pauses, so the first word after a pause is not huge), cut at the background between words
+/// speech of the last seconds (`peak`: rises at once, sinks 0.4 dB a second while speaking, 30 dB a
+/// second while the voice is 2 dB below the window (it showed nothing), never in pauses, so the first word after a pause is
+/// not huge), cut at the background between words
 /// (`floor`: drops at once, rises 0.8 dB a second), never narrower than 8 dB, so a quiet room's
 /// hiss is not blown up. Only the pill uses it, the recording is untouched. Kept per microphone
 /// (`Prefs.levelScales`). Tuned on the owner's levels (`LevelScaleTests`): as recorded, 10 dB louder
@@ -558,21 +572,47 @@ struct LevelScale: Codable, Equatable {
     static let window: CGFloat = 0.38
     static let minimumWindow: CGFloat = 0.2
 
+    /// One loud sound (0.91 on the MacBook microphone, speech 0.15–0.37) hung the window above the
+    /// voice: the line stayed flat in every dictation, sinking 0.4 dB a second it would take a
+    /// minute of speech to come down, and as the speech was counted by the bars, the scale was
+    /// never kept again (2026-10-27). Now a voice below the window brings the peak down within a
+    /// second, and the speech is counted by `isSpeech`.
     mutating func update(_ level: CGFloat, elapsed: TimeInterval) {
         let seconds = CGFloat(elapsed)
         if level < floor { floor = level } else { floor = min(level, floor + 0.02 * seconds) }
         if level > peak {
             peak = level
-        } else if level > floor + Self.minimumWindow / 2 {
-            peak -= 0.01 * seconds
+        } else if isSpeech(level) {
+            peak -= (level < range.low - 0.05 ? 0.75 : 0.01) * seconds
         }
         peak = max(peak, floor + Self.minimumWindow + Self.headroom)
     }
 
+    /// Well above the background (4 dB), whatever the bars show.
+    func isSpeech(_ level: CGFloat) -> Bool {
+        level > floor + Self.minimumWindow / 2
+    }
+
     /// 0…1 of the bar's height, with `LevelBars`' 0.7 curve.
     func loudness(_ level: CGFloat) -> CGFloat {
-        let top = peak - Self.headroom
-        let low = max(floor + Self.margin, top - Self.window)
+        let (low, top) = range
         return pow(max(0, min(1, (level - low) / (top - low))), 0.7)
+    }
+
+    /// 0…1 of the line's swing: the sound's amplitude over the same window, not its decibels, so
+    /// ordinary speech swings about half way and only stressed syllables reach the top (asked
+    /// 2026-10-27: on `loudness` the line looked the same for loud and quiet words). Levels are
+    /// 40 dB per 1.0, so the amplitude is 10^(2·level).
+    func amplitude(_ level: CGFloat) -> CGFloat {
+        let (low, top) = range
+        guard level > low else { return 0 }
+        let bottom = pow(10, 2 * (low - top))
+        return max(0, min(1, (pow(10, 2 * (level - top)) - bottom) / (1 - bottom)))
+    }
+
+    /// The levels shown from empty to full.
+    private var range: (low: CGFloat, top: CGFloat) {
+        let top = peak - Self.headroom
+        return (max(floor + Self.margin, top - Self.window), top)
     }
 }

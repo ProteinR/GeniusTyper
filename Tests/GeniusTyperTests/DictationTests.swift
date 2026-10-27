@@ -331,12 +331,57 @@ final class LevelScaleTests: XCTestCase {
         XCTAssertGreaterThan(shape(cases[1].1.map(LevelBars.loudness)).full, 0.4)
     }
 
+    /// The line's amplitude on the same microphones: ordinary speech swings about half way, quiet
+    /// syllables hardly at all, few reach the top; the bars' loudness puts speech near the top.
+    func testLineSwingsWithLoudAndQuietSpeech() throws {
+        let own = try ownerLevels()
+        let cases: [(String, [CGFloat])] = [
+            ("as recorded", own),
+            ("louder, room noise", own.map { $0 > 0 ? $0 + 0.25 : 0.1 }),
+            ("quieter", own.map { $0 > 0 ? max(0, $0 - 0.1) : 0 }),
+        ]
+        for (name, levels) in cases {
+            var scale = LevelScale.standard
+            _ = heights(levels, &scale)
+            var swings: [CGFloat] = []
+            var bars: [CGFloat] = []
+            for level in levels {
+                scale.update(level, elapsed: 1.0 / 12)
+                swings.append(scale.amplitude(level))
+                bars.append(scale.loudness(level))
+            }
+            let shown = swings.filter { $0 > 0.05 }.sorted()
+            let median = shown[shown.count / 2]
+            XCTAssertGreaterThan(median, 0.35, name)
+            XCTAssertLessThan(median, 0.6, name)
+            XCTAssertLessThan(shown[shown.count / 10], 0.2, name)
+            XCTAssertLessThanOrEqual(Double(shown.filter { $0 >= 0.9 }.count) / Double(shown.count), 0.2, name)
+            XCTAssertLessThan(median, shape(bars).median - 0.2, name)
+            XCTAssertTrue(zip(own, swings).filter { $0.0 == 0 }.allSatisfy { $0.1 == 0 }, name)
+        }
+    }
+
     /// A pause does not lower the scale: the next word is not blown up.
     func testPausesKeepTheScale() {
         var scale = LevelScale(floor: 0.1, peak: 0.7)
         for _ in 0..<120 { scale.update(0.1, elapsed: 1.0 / 12) }
         XCTAssertEqual(scale.peak, 0.7, accuracy: 0.001)
         XCTAssertEqual(scale.loudness(0.1), 0)
+    }
+
+    /// A peak far above the voice (0.91 was kept for the MacBook microphone, 2026-10-27, and the
+    /// line stayed flat): within the first seconds of speech the voice shows again, and it counts
+    /// as speech all along, so the corrected scale is kept.
+    func testScaleFarAboveTheVoiceComesDown() throws {
+        var scale = LevelScale(floor: 0, peak: 0.91)
+        let own = try ownerLevels()
+        let first = Array(own.prefix(12 * 3))
+        XCTAssertGreaterThan(first.filter { scale.isSpeech($0) }.count, first.count / 3)
+        let bars = heights(first, &scale)
+        XCTAssertGreaterThan(bars.suffix(24).filter { $0 > 0.3 }.count, 3)
+        XCTAssertLessThan(scale.peak, 0.75)
+        // From then on the voice shows at about the usual height.
+        XCTAssertGreaterThan(shape(heights(own, &scale)).median, 0.5)
     }
 
     /// A noisy room raises the floor; its hiss shows no bars.
