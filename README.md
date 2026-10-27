@@ -234,7 +234,7 @@ takes ⇧⌘C; quit it or change the shortcut.
   (`ru.keepcoder.Telegram`); only files Telegram has downloaded are found.
 - The ё dictionary is built from [eyo-kernel](https://github.com/hcodes/eyo-kernel) (MIT,
   `GeniusTyper/yo-LICENSE.txt`). The Parakeet model is NVIDIA's, CC BY 4.0.
-- The dictation animations (a monkey, two cats, Bruce Almighty) are made from widely shared GIFs and
+- The dictation animations (a cat in a wig, Bruce Almighty) are made from widely shared GIFs and
   a film clip; they are not covered by the MIT license and belong to their owners.
 
 ## License

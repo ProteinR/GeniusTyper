@@ -211,12 +211,13 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   `DICTATION-PROFILING.md`). The demo
   ("Показать", `--indicator-demo`) uses the owner's levels.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
-  `--indicator-demo`): a monkey, one of two cats or Bruce Almighty above the pill while recording/transcribing,
+  `--indicator-demo`): a cat in a wig or Bruce Almighty above the pill while recording/transcribing,
   typing at full speed while the level is above 0.3 (and 0.2 s after), then slowing down
   smoothly over 1.2 s to a stop (asked 2026-10-26: a hard stop on every pause between words looked
   like stutter). Cut out of the owner's
   GIFs with Vision by `scripts/make-mascots.swift` (largest subject only, frames where the laptop
-  got lifted too are dropped; monkey: frames 106–151,0–43, every 2nd, without the facepalm) into
+  got lifted too are dropped; the monkey and the grey cat were removed on 2026-10-27, the owner
+  found them poorly cut) into
   `scripts/mascots/*.apng` (the sources, not bundled), which `scripts/make-mascot-frames.swift`
   turns into `GeniusTyper/Dictation/Mascots/*.frames`: 96 pt high at 2×, the shadow baked in, raw
   frames compressed with LZFSE (decoding a PNG frame took ~1 ms, this ~0.15 ms; 2026-10-26,

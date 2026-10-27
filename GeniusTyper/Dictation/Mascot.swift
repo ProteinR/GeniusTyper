@@ -8,15 +8,15 @@ import Compression
 /// the shadow baked in, raw frames compressed with LZFSE (a PNG frame took ~1 ms to decode, this
 /// ~0.15 ms).
 enum Mascot: String, CaseIterable, Identifiable {
-    case none, monkey, greyCat, wigCat, bruce
+    /// The monkey and the grey cat were removed on 2026-10-27 (the owner found them poorly cut);
+    /// a stored `monkey` / `greyCat` reads as `none`.
+    case none, wigCat, bruce
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .none: String(localized: "Без анимации")
-        case .monkey: String(localized: "Обезьяна")
-        case .greyCat: String(localized: "Серый кот")
         case .wigCat: String(localized: "Кот в парике")
         case .bruce: String(localized: "Брюс Всемогущий")
         }
@@ -27,8 +27,6 @@ enum Mascot: String, CaseIterable, Identifiable {
     fileprivate var scenes: [[String]] {
         switch self {
         case .none: []
-        case .monkey: [["monkey"]]
-        case .greyCat: [["grey-cat"]]
         case .wigCat: [["wig-cat"]]
         // Cut from a green-screen clip with ffmpeg's chromakey (see AGENTS.md), not Vision.
         case .bruce: [["bruce-front-slow", "bruce-front-fast"], ["bruce-side-slow", "bruce-side-fast"]]
