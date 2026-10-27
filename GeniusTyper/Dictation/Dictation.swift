@@ -84,6 +84,7 @@ final class Dictation: ObservableObject {
             return
         }
         targetApp = NSWorkspace.shared.frontmostApplication
+        let pressed = ProcessInfo.processInfo.systemUptime
         do {
             try recorder.start()
         } catch {
@@ -92,6 +93,9 @@ final class Dictation: ObservableObject {
             Log.error("Recording failed to start: \(Log.describe(error))", "dictation")
             return
         }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - pressed > 0.3 { Log.info(String(format: "Microphone took %.2f s to start", now - pressed), "audio") }
+        press.recordingStarted(at: now)
         let started = Date()
         startedAt = started
         phase = .recording

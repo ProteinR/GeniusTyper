@@ -142,6 +142,14 @@ struct HybridPress {
         return .stop // held: push-to-talk ends on release
     }
 
+    /// The microphone is running: a hold counts from now. Starting a Bluetooth microphone (AirPods
+    /// switching to the headset mode) blocks the main thread for ~1 s, and a tap's release handled
+    /// after that looked like a hold, so the recording stopped at once (2026-10-28).
+    mutating func recordingStarted(at time: TimeInterval) {
+        guard pressedAt != nil, startedByThisPress else { return }
+        pressedAt = time
+    }
+
     /// Recording ended some other way (Esc, error): back to idle.
     mutating func reset() {
         isRecording = false

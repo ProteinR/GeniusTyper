@@ -31,6 +31,30 @@ final class HybridPressTests: XCTestCase {
         XCTAssertEqual(press.keyDown(at: 6), .start)
     }
 
+    func testTapDuringSlowMicrophoneStartKeepsRecording() {
+        var press = HybridPress()
+        XCTAssertEqual(press.keyDown(at: 0), .start)
+        // The microphone took 0.9 s to start; the release (at 0.1) is handled only after it.
+        press.recordingStarted(at: 0.9)
+        XCTAssertEqual(press.keyUp(at: 0.92), .none)
+        XCTAssertTrue(press.isRecording)
+    }
+
+    func testHoldAfterSlowMicrophoneStartIsPushToTalk() {
+        var press = HybridPress()
+        _ = press.keyDown(at: 0)
+        press.recordingStarted(at: 0.9)
+        XCTAssertEqual(press.keyUp(at: 2), .stop)
+    }
+
+    func testRecordingStartedAfterReleaseChangesNothing() {
+        var press = HybridPress()
+        _ = press.keyDown(at: 0)
+        _ = press.keyUp(at: 0.1)
+        press.recordingStarted(at: 0.9)
+        XCTAssertEqual(press.keyDown(at: 3), .stop)
+    }
+
     func testKeyRepeatIgnored() {
         var press = HybridPress()
         XCTAssertEqual(press.keyDown(at: 0), .start)
