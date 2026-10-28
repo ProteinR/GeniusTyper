@@ -171,7 +171,8 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   `gpt-4o-transcribe`, "Другой сервис" with its own address); keys in the login Keychain
   (`Keychain`). Not used yet beyond the code; the owner may want Groq/OpenAI later.
 - **The model runs in a helper process** `Contents/MacOS/GeniusTyperEngine` (`GeniusTyperEngine/main.swift`;
-  only it links FluidAudio; second argument `v3` or `ultra`). Genius Typer starts it when recording starts (the model loads in ~0.2 s
+  only it links FluidAudio and SQLCipher; second argument `v3` or `ultra`; `senders` mode for
+  Telegram). Genius Typer starts it when recording starts (the model loads in ~0.2 s
   while the user speaks), sends samples over stdin, reads JSON lines from stdout, and closes its
   stdin after `Prefs.unloadAfterMinutes` (default 5; 1/5/15/60/never) without dictation, so it
   exits. Why: loading the model in-process left ~30 MB of fragmented malloc memory that
@@ -290,9 +291,25 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   deletes a text (not while it is transcribed); the file stays remembered as `deleted` without
   text, so it is not transcribed again. The list scrolls to a new page only after "more" (scrolling
   on every new item jumped to the bottom when new voices were found on opening). The format before
-  0.13.0 (`key` + `text`) is read and converted. Nothing goes into the dictation history or statistics (the owner wants only own dictation there). The chat a file came from is only in Telegram's encrypted database, so the
-  owner keeps voice auto-download on for private chats only (Telegram → Data and Storage). Video
-  circles (mp4) are not included. `-voicesRoot <folder>` points it at a test folder; `--voices`
+  0.13.0 (`key` + `text`) is read and converted. Nothing goes into the dictation history or statistics (the owner wants only own dictation there). The list is still the newest files (the chat is known only after the
+  helper read it), so the owner keeps voice auto-download on for private chats only (Telegram →
+  Data and Storage). Video
+  circles (mp4) are not included. **Sender** (asked 2026-10-29; `voicesSenders`, on by default,
+  "Показывать отправителя" in Диктовка): `GeniusTyperEngine senders <file>…` opens Telegram's
+  SQLCipher database (`postbox/db/db_sqlite`, read-only, next to the running Telegram) and prints
+  who sent each file; the app runs it after each scan and "more" for the items with no sender
+  (also stored ones from before 0.19.0) and keeps the result in `VoiceText.sender`. The row's date
+  line starts with it ("Анна", "Вы → Анна", "Иван · Семья", "… · переслано от …"), search matches
+  it too. The key: `stable/.tempkeyEncrypted`, AES with SHA-512 of "no-matter-key" (no passcode in
+  Telegram; with one, no names). Format in `TelegramPostbox.swift` (tables t6 media → t7 message →
+  t2 peer, from Telegram-iOS `submodules/Postbox`; shared with the helper, tested on made-up bytes);
+  a media forwarded to several chats is stored on its own and found by one pass over the messages
+  (~0.4 s), the newest wins; a name equal to the chat's (a channel's post, a channel's auto-forward
+  to its chat) is not repeated. On 2026-10-29: 56 of the 65 cached voices found in ~0.9 s (16 of
+  them have ".mp3"/".ogg" in the file name); the other 9 are old files whose messages are no longer in the database. SQLCipher (SQLCipher.swift 4.20.0, a 3 MB
+  dynamic framework in `Contents/Frameworks`, copied by a post-build script) is linked only into
+  the helper: it has its own sqlite3, the app uses the system SQLite for the history.
+  `-voicesRoot <folder>` points it at a test folder; `--voices`
   opens the popup at launch. The owner declined importing TypeWhisper's history (2026-10-26).
 - **App language**: architecture only. Strings go through `String(localized:)` /
   `LocalizedStringKey`; `Localizable.xcstrings` (source ru) is still empty: Xcode fills it with the

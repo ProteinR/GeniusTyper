@@ -7,8 +7,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.18.0"
-    CURRENT_PROJECT_VERSION: "44"
+    MARKETING_VERSION: "0.19.0"
+    CURRENT_PROJECT_VERSION: "45"
     # No Apple Developer account: ad-hoc signing, no hardened runtime (scripts/install.sh re-signs
     # with the local certificate so the Input Monitoring permission survives rebuilds).
     DEVELOPMENT_TEAM: ""
@@ -24,6 +24,11 @@ packages:
     url: https://github.com/FluidInference/FluidAudio
     from: 0.17.7
     traits: []
+  # Reads Telegram's encrypted database for the senders of voice messages, only in
+  # GeniusTyperEngine (it has its own sqlite3; the app uses the system SQLite).
+  SQLCipher:
+    url: https://github.com/sqlcipher/SQLCipher.swift
+    exactVersion: 4.20.0
 targets:
   GeniusTyper:
     type: application
@@ -37,6 +42,18 @@ targets:
         embed: true
         copy:
           destination: executables
+    # GeniusTyperEngine loads SQLCipher (a dynamic framework) from Contents/Frameworks; the app
+    # itself does not link it.
+    postBuildScripts:
+      - name: Embed SQLCipher for GeniusTyperEngine
+        script: |
+          mkdir -p "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH"
+          rm -rf "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/SQLCipher.framework"
+          ditto "$BUILT_PRODUCTS_DIR/SQLCipher.framework" "$TARGET_BUILD_DIR/$FRAMEWORKS_FOLDER_PATH/SQLCipher.framework"
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/SQLCipher.framework
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(FRAMEWORKS_FOLDER_PATH)/SQLCipher.framework
     info:
       path: GeniusTyper/Info.plist
       properties:
@@ -66,11 +83,16 @@ targets:
     platform: macOS
     sources:
       - GeniusTyperEngine
+      # Telegram's database format, shared with the app (whose tests check it).
+      - GeniusTyper/Dictation/TelegramPostbox.swift
     dependencies:
       - package: FluidAudio
+      - package: SQLCipher
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.dmemruk.GeniusTyperEngine
+        # Contents/MacOS/GeniusTyperEngine finds SQLCipher.framework in Contents/Frameworks.
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/../Frameworks"
         SKIP_INSTALL: YES
   # Unit tests of the pure logic: word tracking, rewrites, the detector, the dictation key, history and statistics.
   GeniusTyperTests:

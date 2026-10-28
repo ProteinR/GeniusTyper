@@ -1,4 +1,5 @@
 import Carbon.HIToolbox
+import CommonCrypto
 import XCTest
 @testable import GeniusTyper
 
@@ -421,5 +422,93 @@ final class LevelScaleTests: XCTestCase {
     func testStoredAsJSON() throws {
         let scales = ["AirPods": LevelScale(floor: 0.1, peak: 0.7)]
         XCTAssertEqual(try JSONDecoder().decode([String: LevelScale].self, from: JSONEncoder().encode(scales)), scales)
+    }
+}
+
+/// Telegram's database format for the sender of a voice message, on made-up bytes laid out as
+/// Postbox writes them (no real ids or names: the repository is public).
+final class TelegramPostboxTests: XCTestCase {
+    private func le<T: FixedWidthInteger>(_ value: T) -> [UInt8] { withUnsafeBytes(of: value.littleEndian) { Array($0) } }
+    /// Byte runs joined (one long `+` chain is too slow for the type checker).
+    private func bytes(_ parts: [UInt8]...) -> Data { Data(parts.joined()) }
+
+    func testMurmurMatchesReferenceValues() {
+        XCTAssertEqual(TelegramPostbox.murmur3(Data(), seed: 0), 0)
+        XCTAssertEqual(TelegramPostbox.murmur3(Data("hello".utf8), seed: 0), 0x248b_fa47)
+        XCTAssertEqual(TelegramPostbox.murmur3(Data("hello, world".utf8), seed: 0), 0x149b_bb7f)
+    }
+
+    func testDatabaseKeyFromDefaultPasscode() {
+        let keyAndSalt = Data((0..<48).map { UInt8($0 * 5 % 251) })
+        let hash = TelegramPostbox.murmur3(keyAndSalt, seed: UInt32(bitPattern: -137_723_950))
+        let plain = [UInt8](bytes([UInt8](keyAndSalt), le(hash), [UInt8](repeating: 0, count: 12)))
+        func encrypted(_ passcode: String) -> Data {
+            var digest = [UInt8](repeating: 0, count: Int(CC_SHA512_DIGEST_LENGTH))
+            CC_SHA512(Array(passcode.utf8), CC_LONG(passcode.utf8.count), &digest)
+            var out = [UInt8](repeating: 0, count: 64)
+            var moved = 0
+            CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES), 0, Array(digest[0..<32]), 32, Array(digest[48..<64]),
+                    plain, 64, &out, 64, &moved)
+            return Data(out)
+        }
+        XCTAssertEqual(TelegramPostbox.databaseKey(tempkeyEncrypted: encrypted("no-matter-key")), keyAndSalt)
+        XCTAssertNil(TelegramPostbox.databaseKey(tempkeyEncrypted: encrypted("1234"))) // a passcode set in Telegram
+        XCTAssertNil(TelegramPostbox.databaseKey(tempkeyEncrypted: Data(count: 10)))
+    }
+
+    func testDocumentIdAndKeys() {
+        XCTAssertEqual(TelegramPostbox.documentId(fileName: "telegram-cloud-document-2-5000000000000000001"), 5_000_000_000_000_000_001)
+        XCTAssertEqual(TelegramPostbox.documentId(fileName: "telegram-cloud-document-2-5000000000000000001.mp3"), 5_000_000_000_000_000_001)
+        XCTAssertNil(TelegramPostbox.documentId(fileName: "telegram-cloud-photo-size-2-1-y"))
+        XCTAssertNil(TelegramPostbox.documentId(fileName: "telegram-cloud-document-2-5000000000000000001_partial"))
+        XCTAssertEqual([UInt8](TelegramPostbox.mediaKey(documentId: 0x0102_0304_0506_0708)), [0, 0, 0, 5, 1, 2, 3, 4, 5, 6, 7, 8])
+        XCTAssertEqual([UInt8](TelegramPostbox.referencePattern(documentId: 0x0102)), [5, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0])
+
+        let media = bytes([1], le(Int64(123_456)), le(Int32(0)), le(Int32(77)), le(Int32(1_800_000_000)))
+        let index = TelegramPostbox.messageIndex(media: media)
+        XCTAssertEqual(index, TelegramPostbox.MessageIndex(peer: 123_456, namespace: 0, id: 77, timestamp: 1_800_000_000))
+        XCTAssertEqual(index!.key, bytes([0, 0, 0, 0, 0, 1, 0xe2, 0x40], [0, 0, 0, 0], [0x6b, 0x49, 0xd2, 0x00], [0, 0, 0, 77]))
+        XCTAssertEqual(TelegramPostbox.messageIndex(key: index!.key), index)
+        XCTAssertNil(TelegramPostbox.messageIndex(media: bytes([0], le(Int32(10))))) // stored on its own
+    }
+
+    func testMessageHeader() {
+        let start: [UInt8] = [0] + le(UInt32(9)) + le(UInt32(1))
+        // Incoming, with a globally unique id and a thread id, author 42.
+        let incoming = bytes(start, [0b10_0001], le(Int64(1)), le(Int64(2)), le(UInt32(4 | 64)), le(UInt32(16)), [0], [1], le(Int64(42)), le(Int32(0)))
+        XCTAssertEqual(TelegramPostbox.messageHeader(incoming), .init(incoming: true, author: 42, forwardAuthor: nil))
+        // Outgoing, forwarded from 7 with a source peer, a source message and a signature.
+        let forward = bytes([0b1110], le(Int64(7)), le(Int32(1_800_000_000)), le(Int64(8)), le(Int64(8)), le(Int32(0)), le(Int32(5)),
+                            le(Int32(3)), Array("abc".utf8))
+        let outgoing = bytes(start, [0], le(UInt32(0)), le(UInt32(16)), [UInt8](forward), [1], le(Int64(99)))
+        XCTAssertEqual(TelegramPostbox.messageHeader(outgoing), .init(incoming: false, author: 99, forwardAuthor: 7))
+        XCTAssertNil(TelegramPostbox.messageHeader(bytes(start, [0], le(UInt32(4))))) // cut short
+    }
+
+    func testPeerNames() {
+        func field(_ key: String, _ value: String) -> [UInt8] {
+            [UInt8(key.utf8.count)] + Array(key.utf8) + [4] + le(Int32(value.utf8.count)) + Array(value.utf8)
+        }
+        let user = bytes([1, 0x5f, 5], le(Int32(1)), le(Int32(0)), [1, 0x69, 1], le(Int64(5)), field("fn", "Анна"), field("ln", "Петрова"), field("un", "anna"))
+        XCTAssertEqual(TelegramPostbox.peerName(user), "Анна Петрова")
+        XCTAssertEqual(TelegramPostbox.peerName(bytes(field("fn", "Анна"))), "Анна")
+        XCTAssertEqual(TelegramPostbox.peerName(bytes(field("t", "Семья"), field("un", "family"))), "Семья")
+        XCTAssertNil(TelegramPostbox.peerName(bytes([2, 0x66, 0x6e, 4, 0xff, 0xff, 0xff, 0x7f])))
+        XCTAssertTrue(TelegramPostbox.isUser(123_456))
+        XCTAssertFalse(TelegramPostbox.isUser(Int64(2) << 32 | 777)) // a channel
+        XCTAssertTrue(TelegramPostbox.isUser(Int64(1) << 35 | 777)) // a user with a large id
+    }
+
+    func testSenderTitleAndStorage() throws {
+        XCTAssertEqual(VoiceSender(chat: "Анна", outgoing: false).title, "Анна")
+        XCTAssertEqual(VoiceSender(chat: "Анна", outgoing: true).title, "Вы → Анна")
+        XCTAssertEqual(VoiceSender(chat: "Семья", author: "Иван", outgoing: false).title, "Иван · Семья")
+        XCTAssertEqual(VoiceSender(chat: "Анна", forwardedFrom: "Иван", outgoing: false).title, "Анна · переслано от Иван")
+        let day = Date(timeIntervalSince1970: 1_792_000_000)
+        let text = VoiceText(path: "/a", date: day, duration: 3, text: "привет", added: day, sender: VoiceSender(chat: "Анна", outgoing: false))
+        XCTAssertEqual(VoiceText.decode(try JSONEncoder().encode([text])), [text])
+        // Stored before 0.19.0: no sender.
+        let old = VoiceText(path: "/a", date: day, duration: 3, text: "привет", added: day)
+        XCTAssertNil(VoiceText.decode(try JSONEncoder().encode([old]))[0].sender)
     }
 }

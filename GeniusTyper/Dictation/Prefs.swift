@@ -9,6 +9,7 @@ enum Prefs {
             "dictationEnabled": false,
             "voicesEnabled": true,
             "voicesKeepDays": 7,
+            "voicesSenders": true,
             "dictationYo": true,
             "dictationSounds": true,
             "escCancels": true,
@@ -33,6 +34,12 @@ enum Prefs {
     static var voicesKeepDays: Int {
         get { max(0, defaults.integer(forKey: "voicesKeepDays")) }
         set { defaults.set(newValue, forKey: "voicesKeepDays") }
+    }
+
+    /// Who sent a voice message, read from Telegram's database (`TelegramPostbox`).
+    static var voicesSenders: Bool {
+        get { defaults.bool(forKey: "voicesSenders") }
+        set { defaults.set(newValue, forKey: "voicesSenders") }
     }
 
     /// Voice messages of these days not transcribed yet are transcribed on opening: the days kept,

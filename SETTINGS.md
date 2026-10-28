@@ -62,6 +62,7 @@ defaults write com.dmemruk.GeniusTyper autoOffApps -array-add com.sublimetext.4
 | `mascot` | string | `none` | Animation above the pill: `none`, `wigCat`, `bruce` (the removed `monkey` and `greyCat` read as `none`). |
 | `voicesEnabled` | bool | `true` | Telegram voice messages (inside dictation). |
 | `voicesShortcut` | data (JSON) | ⌃⌥V | Same format as `clipboardHotKey`. |
+| `voicesSenders` | bool | `true` | Show who sent a voice message (read from Telegram's database on this Mac). |
 | `voicesKeepDays` | int | `7` | Voice message texts are kept this many days (1 / 3 / 7 / 30; 0 = forever, new voice messages of the last 7 days are then transcribed on opening). |
 
 API keys are not in the defaults: they are in the login Keychain, service `com.dmemruk.GeniusTyper`,

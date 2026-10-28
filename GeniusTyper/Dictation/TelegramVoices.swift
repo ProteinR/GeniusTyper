@@ -12,9 +12,9 @@ struct VoiceFile: Equatable {
 /// keeps each downloaded file under
 /// `~/Library/Group Containers/6N38VWS5BX.ru.keepcoder.Telegram/stable/account-*/postbox/media/`
 /// without an extension; voice messages are Ogg Opus, which `AVAudioFile` decodes. Which chat a
-/// file came from is only in Telegram's encrypted database, so "latest" means the newest files;
-/// leaving voice auto-download on for private chats only (Telegram → Data and Storage) keeps
-/// group messages out unless played.
+/// file came from is only in Telegram's encrypted database: the helper reads it for the sender
+/// (`senders(of:)`), but "latest" still means the newest files, so leaving voice auto-download on
+/// for private chats only (Telegram → Data and Storage) keeps group messages out unless played.
 enum TelegramVoices {
     /// `-voicesRoot <folder>` (a launch argument) points it at a test folder.
     static var root: URL {
@@ -104,6 +104,34 @@ enum TelegramVoices {
         return (fresh, others, older)
     }
 
+    /// Who sent each voice message (by path), read from Telegram's database by the helper
+    /// (`GeniusTyperEngine senders`, which links SQLCipher). Files it cannot place are left out.
+    static func senders(of paths: [String]) -> [String: VoiceSender] {
+        guard !paths.isEmpty, let url = Bundle.main.url(forAuxiliaryExecutable: "GeniusTyperEngine") else { return [:] }
+        let process = Process()
+        process.executableURL = url
+        process.arguments = ["senders"] + paths
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch {
+            Log.error("Telegram senders: \(Log.describe(error))", "voices")
+            return [:]
+        }
+        // Telegram may hold the database for a moment; never wait on it for long.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10) { if process.isRunning { process.terminate() } }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        var result: [String: VoiceSender] = [:]
+        for line in data.split(separator: 10) {
+            guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                  let path = object["path"] as? String, let chat = object["chat"] as? String else { continue }
+            result[path] = VoiceSender(chat: chat, author: object["author"] as? String,
+                                       forwardedFrom: object["forwardedFrom"] as? String, outgoing: object["outgoing"] as? Bool ?? false)
+        }
+        return result
+    }
+
     /// "OggS" page with an "OpusHead" header: a voice message (stickers and videos are other formats).
     static func isOggOpus(_ url: URL) -> Bool {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
@@ -125,6 +153,8 @@ struct VoiceText: Codable, Equatable {
     let added: Date
     /// Deleted by the user: kept without its text, so the file is not transcribed again.
     var deleted: Bool? = nil
+    /// Who sent it (nil: not found, a passcode in Telegram, or stored before 0.19.0).
+    var sender: VoiceSender? = nil
 
     var key: String { Self.key(path: path, date: date) }
     var file: VoiceFile { VoiceFile(url: URL(fileURLWithPath: path), date: date, duration: duration) }
@@ -182,6 +212,7 @@ final class VoiceTranscripts: ObservableObject {
     struct Item: Identifiable, Equatable {
         let file: VoiceFile
         var text: Text
+        var sender: VoiceSender?
         var id: String { file.url.path }
     }
 
@@ -209,6 +240,8 @@ final class VoiceTranscripts: ObservableObject {
     /// Files in the cache that are not voice messages (photos, stickers…), for this run: their
     /// headers are read once.
     private var notVoices: Set<String> = []
+    /// Files whose sender was looked for in this run (found or not), so it is done once.
+    private var askedSenders: Set<String> = []
     private var older: [TelegramVoices.Candidate] = []
     private var next = 0
     private var loader: Task<Void, Never>?
@@ -218,7 +251,7 @@ final class VoiceTranscripts: ObservableObject {
         clear()
         problem = nil
         let now = Date()
-        items = storedTexts(now: now).map { Item(file: $0.file, text: .done($0.text)) }
+        items = storedTexts(now: now).map { Item(file: $0.file, text: .done($0.text), sender: $0.sender) }
         isChecking = true
         let since = now.addingTimeInterval(-TimeInterval(Prefs.voicesScanDays) * 86_400)
         let known = Set(texts.map(\.path)), notVoices = notVoices
@@ -233,6 +266,7 @@ final class VoiceTranscripts: ObservableObject {
             hasMore = !older.isEmpty
             isChecking = false
             add(found.fresh)
+            lookUpSenders()
             if items.isEmpty {
                 problem = FileManager.default.fileExists(atPath: TelegramVoices.root.path)
                     ? String(localized: "Голосовых в кеше Telegram нет. Откройте сообщение и нажмите воспроизведение — оно скачается за секунду.")
@@ -262,6 +296,7 @@ final class VoiceTranscripts: ObservableObject {
             next = page.next
             hasMore = page.next < older.count
             add(page.files)
+            lookUpSenders()
             newPage = page.files.first?.url.path
             transcribeWaiting()
         }
@@ -271,6 +306,31 @@ final class VoiceTranscripts: ObservableObject {
     private func add(_ files: [VoiceFile]) {
         guard !files.isEmpty else { return }
         items = (items + files.map { Item(file: $0, text: .waiting) }).sorted { $0.file.date > $1.file.date }
+    }
+
+    /// Who sent the items that have no sender yet and are still in Telegram's cache, also the
+    /// stored ones from before 0.19.0. Not cancelled with the list: the names are kept with the texts.
+    private func lookUpSenders() {
+        guard Prefs.voicesSenders else { return }
+        let paths = items.filter { $0.sender == nil && !askedSenders.contains($0.id) }.map(\.id)
+            .filter { FileManager.default.fileExists(atPath: $0) }
+        guard !paths.isEmpty else { return }
+        askedSenders.formUnion(paths)
+        Task {
+            let start = Date()
+            let found = await Task.detached(priority: .userInitiated) { TelegramVoices.senders(of: paths) }.value
+            Log.info(String(format: "Telegram senders: %d of %d found in %.2f s", found.count, paths.count, Date().timeIntervalSince(start)), "voices")
+            guard !found.isEmpty else { return }
+            for index in items.indices { if let sender = found[items[index].id] { items[index].sender = sender } }
+            var changed = false
+            for index in texts.indices where texts[index].sender == nil {
+                if let sender = found[texts[index].path] {
+                    texts[index].sender = sender
+                    changed = true
+                }
+            }
+            if changed { save() }
+        }
     }
 
     /// Transcribes the waiting items in order, newest first; items added meanwhile join the queue.
@@ -368,7 +428,8 @@ final class VoiceTranscripts: ObservableObject {
     }
 
     private func remember(_ text: String, for file: VoiceFile) {
-        let entry = VoiceText(path: file.url.path, date: file.date, duration: file.duration, text: text, added: Date())
+        let sender = items.first { $0.id == file.url.path }?.sender
+        let entry = VoiceText(path: file.url.path, date: file.date, duration: file.duration, text: text, added: Date(), sender: sender)
         texts.removeAll { $0.path == entry.path }
         texts.append(entry)
         save()

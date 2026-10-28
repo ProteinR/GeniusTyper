@@ -153,13 +153,13 @@ struct VoicesView: View {
     private var query: String { search.trimmingCharacters(in: .whitespaces) }
 
     /// While searching: only the texts with every word of the query (also typed in the wrong
-    /// layout, ё as е), as in the clipboard history; "more" is off.
+    /// layout, ё as е) in the text or the sender, as in the clipboard history; "more" is off.
     private var shown: [VoiceTranscripts.Item] {
         guard !query.isEmpty else { return model.items }
         let alternative = ClipboardRules.retyped(query, renderer: Observer.shared.layouts)
         return model.items.filter { item in
             guard case .done(let text) = item.text else { return false }
-            return ClipboardRules.matches(text, query: query, alternative: alternative)
+            return ClipboardRules.matches(item.sender.map { "\($0.title) \(text)" } ?? text, query: query, alternative: alternative)
         }
     }
 
@@ -297,9 +297,10 @@ private struct VoiceRow: View {
 
     private var meta: String {
         let seconds = Int(item.file.duration.rounded())
-        let time = item.file.date.formatted(.relative(presentation: .named))
+        var parts = [item.file.date.formatted(.relative(presentation: .named))]
+        if let sender = item.sender { parts.insert(sender.title, at: 0) }
         // Texts stored before 0.13.0 have no duration.
-        guard seconds > 0 else { return time }
-        return "\(time) · \(seconds / 60):\(String(format: "%02d", seconds % 60))"
+        if seconds > 0 { parts.append("\(seconds / 60):\(String(format: "%02d", seconds % 60))") }
+        return parts.joined(separator: " · ")
     }
 }

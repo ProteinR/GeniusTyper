@@ -10,6 +10,7 @@ struct DictationPage: View {
     @AppStorage("dictationYo") private var yo = true
     @AppStorage("voicesEnabled") private var voices = true
     @AppStorage("voicesKeepDays") private var keepDays = 7
+    @AppStorage("voicesSenders") private var senders = true
     /// The stored voice texts: how many and how much space, read on opening.
     @State private var stored = (count: 0, bytes: Int64(0))
     @AppStorage("mascot") private var mascot = Mascot.none.rawValue
@@ -89,6 +90,14 @@ struct DictationPage: View {
                 }
                 ShortcutRow(kind: .voices)
                     .active(voices)
+                Toggle(isOn: $senders) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Показывать отправителя")
+                        Text("Имя берётся из базы Telegram на этом Mac (только чтение). Не работает, если в Telegram включён код-пароль")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .active(voices)
                 LabeledContent {
                     Menu {
                         ForEach([1, 3, 7, 30, 0], id: \.self) { days in

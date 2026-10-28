@@ -166,7 +166,7 @@ private struct VoiceHistory: View {
     private var shown: [VoiceText] {
         guard !query.isEmpty else { return all }
         let alternative = ClipboardRules.retyped(query, renderer: Observer.shared.layouts)
-        return all.filter { ClipboardRules.matches($0.text, query: query, alternative: alternative) }
+        return all.filter { ClipboardRules.matches(($0.sender.map { "\($0.title) " } ?? "") + $0.text,query: query, alternative: alternative) }
     }
 
     private func reload() {
@@ -176,6 +176,7 @@ private struct VoiceHistory: View {
 
     private func meta(_ item: VoiceText) -> String {
         var parts = [item.date.formatted(.relative(presentation: .named))]
+        if let sender = item.sender { parts.insert(sender.title, at: 0) }
         // Texts stored before 0.13.0 have no duration.
         let seconds = Int(item.duration.rounded())
         if seconds > 0 { parts.append("\(seconds / 60):\(String(format: "%02d", seconds % 60))") }

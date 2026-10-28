@@ -9,6 +9,8 @@
 //                (UInt32 little-endian sample count + Float32 samples, 16 kHz mono) one
 //                {"text": "…", "seconds": 0.07} | {"error": "…"}. Exits when stdin closes (Genius Typer
 //                unloaded the model, or quit or crashed).
+//   senders <file>…  → one {"path": "…", "chat": "…", "author": "…", "forwardedFrom": "…", "outgoing": false}
+//                per Telegram voice message whose sender is found (TelegramSenders.swift), then exits.
 import FluidAudio
 import Foundation
 
@@ -81,7 +83,11 @@ case "serve":
     }
     exit(0)
 
+case "senders":
+    telegramSenders(Array(CommandLine.arguments.dropFirst(2))).forEach(emit)
+    exit(0)
+
 default:
-    FileHandle.standardError.write("usage: GeniusTyperEngine download | serve [v3 | ultra]\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: GeniusTyperEngine download | serve [v3 | ultra] | senders <file>…\n".data(using: .utf8)!)
     exit(2)
 }

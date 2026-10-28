@@ -89,8 +89,8 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
   microphone and the room, and is remembered per microphone), ё restored in the text,
   history with search and statistics (words, words per minute, time saved).
 - **Telegram voice messages**: the newest voice messages from the official Telegram app's cache,
-  transcribed locally and kept for a few days or forever; search them, copy or delete each text,
-  also in the settings' history.
+  transcribed locally and kept for a few days or forever, each with who sent it (the person, or
+  the author and the group); search them, copy or delete each text, also in the settings' history.
 
 ## Built for Apple Silicon
 
@@ -237,7 +237,9 @@ takes ⇧⌘C; quit it or change the shortcut.
 ## Notes
 
 - Telegram voice messages are read from the cache of the official Telegram for macOS app
-  (`ru.keepcoder.Telegram`); only files Telegram has downloaded are found.
+  (`ru.keepcoder.Telegram`); only files Telegram has downloaded are found. The sender comes from
+  Telegram's own database on this Mac, opened read-only with [SQLCipher](https://github.com/sqlcipher/SQLCipher.swift)
+  (BSD) in the helper process; with a passcode set in Telegram the names are not shown.
 - The ё dictionary is built from [eyo-kernel](https://github.com/hcodes/eyo-kernel) (MIT,
   `GeniusTyper/yo-LICENSE.txt`). Parakeet v3 is NVIDIA's, Parakeet Ultra is Moondream's, both CC BY 4.0.
 - The dictation animations (a cat in a wig, Bruce Almighty) are made from widely shared GIFs and

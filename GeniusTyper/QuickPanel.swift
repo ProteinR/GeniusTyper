@@ -566,7 +566,8 @@ struct SideRow<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
-                Text(meta).font(.caption).foregroundStyle(.secondary)
+                // One line: a long group name is cut, not wrapped.
+                Text(meta).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 Spacer()
                 if let copy {
                     Button {
