@@ -70,7 +70,7 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 - ⇧⌘C (changeable) opens the history at the pointer: search (also typed in the wrong layout),
   app icons, preview, ⏎ pastes, ⇧⏎ pastes without formatting, ⌘1…9.
 - The newest entries also sit in the menu bar icon's left-click menu: point at "История буфера" for
-  the list with search; a click copies an entry.
+  the list with search; a click copies an entry, the one under the pointer shows its preview.
 - Text, rich text, images and files; a size limit in MB.
 - Skips password managers, private/transient pasteboard types and crypto seed phrases.
 

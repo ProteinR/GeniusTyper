@@ -159,10 +159,17 @@ enum ClipboardWindow {
 
     static func showPreview(_ item: ClipboardItem) {
         guard let panel, panel.isVisible else { return }
+        showPreview(item, beside: panel)
+    }
+
+    /// The preview beside `window` (the history window or the left-click panel), on the right when
+    /// it fits there (`left`: on the left first), no taller than the window. `hover` hears the
+    /// pointer entering and leaving it.
+    static func showPreview(_ item: ClipboardItem, beside window: NSWindow, left: Bool = false, hover: ((Bool) -> Void)? = nil) {
         let preview = preview ?? makePreview()
         Self.preview = preview
-        let previewHeight = Self.previewHeight(item)
-        let content = ClipboardPreview(item: item, height: previewHeight)
+        let previewHeight = Self.previewHeight(item, max: window.frame.height)
+        let content = ClipboardPreview(item: item, height: previewHeight, hover: hover)
         if let previewHost {
             previewHost.rootView = content
         } else {
@@ -170,16 +177,21 @@ enum ClipboardWindow {
             previewHost = host
             preview.contentView = Background(content: host)
         }
-        let frame = panel.frame
-        let visible = (panel.screen ?? NSScreen.main)?.visibleFrame ?? frame
-        let x = frame.maxX + previewWidth + 4 <= visible.maxX ? frame.maxX + 4 : frame.minX - previewWidth - 4
+        let frame = window.frame
+        let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? frame
+        let right = frame.maxX + 4, leftX = frame.minX - previewWidth - 4
+        let fitsRight = right + previewWidth <= visible.maxX, fitsLeft = leftX >= visible.minX
+        let x = left ? (fitsLeft || !fitsRight ? leftX : right) : (fitsRight || !fitsLeft ? right : leftX)
         preview.setFrame(NSRect(x: x, y: frame.maxY - previewHeight, width: previewWidth, height: previewHeight), display: true)
-        if preview.parent == nil { panel.addChildWindow(preview, ordered: .above) }
+        if preview.parent !== window {
+            preview.parent?.removeChildWindow(preview)
+            window.addChildWindow(preview, ordered: .above)
+        }
         preview.orderFront(nil)
     }
 
     /// As tall as the content (up to the list's height): padding and the details line are ~60 pt.
-    private static func previewHeight(_ item: ClipboardItem) -> CGFloat {
+    private static func previewHeight(_ item: ClipboardItem, max maxHeight: CGFloat) -> CGFloat {
         let content: CGFloat
         switch item.kind {
         case .text, .files:
@@ -191,11 +203,12 @@ enum ClipboardWindow {
             let ratio = CGFloat(item.height ?? 1) / CGFloat(max(item.width ?? 1, 1))
             content = min((previewWidth - 24) * ratio, 400)
         }
-        return min(max(content + 60, 100), height)
+        return min(max(content + 60, 100), maxHeight)
     }
 
-    static func hidePreview() {
-        guard let preview else { return }
+    /// `of`: only when it hangs beside that window.
+    static func hidePreview(of window: NSWindow? = nil) {
+        guard let preview, window == nil || preview.parent === window else { return }
         preview.parent?.removeChildWindow(preview)
         preview.orderOut(nil)
         preview.contentView = nil  // its image goes with it
@@ -450,6 +463,7 @@ private struct ClipboardRow: View {
 struct ClipboardPreview: View {
     let item: ClipboardItem
     let height: CGFloat
+    var hover: ((Bool) -> Void)?
     private let store = ClipboardStore.shared
 
     var body: some View {
@@ -479,6 +493,8 @@ struct ClipboardPreview: View {
         }
         .padding(12)
         .frame(width: ClipboardWindow.previewWidth, height: height, alignment: .top)
+        .contentShape(Rectangle())
+        .onHover { hover?($0) }
     }
 
     private var details: String {

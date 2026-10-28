@@ -20,6 +20,7 @@ final class QuickPanel {
     private var anchor: NSRect?
 
     var isShown: Bool { panel != nil }
+    var window: NSWindow? { panel }
 
     func show(under button: NSStatusBarButton?, anchor: NSRect?, side: String? = nil) {
         self.button = button
@@ -37,6 +38,7 @@ final class QuickPanel {
     func close() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
+        ClipboardHoverPreview.shared.hide()
         panel?.orderOut(nil)
         panel = nil
         host = nil
@@ -390,6 +392,7 @@ private struct HistorySide: View {
 /// history window), the newest entries, a click copies; the whole history is in its window. A
 /// snapshot of the entries, taken on opening and on each search: the panel does not observe
 /// `ClipboardStore.items`, and copying an entry (which moves it to the top) does not reorder the list.
+/// The entry under the pointer opens the history window's preview beside the panel.
 private struct ClipboardSide: View {
     let close: () -> Void
     @State private var search = ""
@@ -414,11 +417,14 @@ private struct ClipboardSide: View {
                         VStack(alignment: .leading, spacing: 2) {
                             ForEach(items) { item in
                                 SideRow(meta: meta(item), copy: { copy(item) }, delete: {
+                                    ClipboardHoverPreview.shared.hide()
                                     store.delete(item)
                                     load()
                                 }, action: {
                                     copy(item)
                                     close()
+                                }, hover: { inside in
+                                    inside ? ClipboardHoverPreview.shared.enter(item) : ClipboardHoverPreview.shared.leave()
                                 }) {
                                     content(item)
                                 }
@@ -488,6 +494,59 @@ private struct ClipboardSide: View {
     }
 }
 
+/// The preview of the clipboard entry under the pointer, on the left of the panel (where the column
+/// is), as in the history window: after a pause on the first entry, then at once while the pointer
+/// moves over the list. It stays while the pointer is on it (a long text scrolls there) and goes a
+/// moment after the pointer has left both the list and the preview.
+@MainActor
+private final class ClipboardHoverPreview {
+    static let shared = ClipboardHoverPreview()
+
+    private static let delay: TimeInterval = 0.6
+    private static let grace: TimeInterval = 0.3
+
+    private var showWork: DispatchWorkItem?
+    private var hideWork: DispatchWorkItem?
+    private var shown = false
+
+    func enter(_ item: ClipboardItem) {
+        hideWork?.cancel()
+        showWork?.cancel()
+        if shown {
+            show(item)
+        } else {
+            let work = DispatchWorkItem { [weak self] in self?.show(item) }
+            showWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.delay, execute: work)
+        }
+    }
+
+    func leave() {
+        showWork?.cancel()
+        hideWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.hide() }
+        hideWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.grace, execute: work)
+    }
+
+    func hide() {
+        showWork?.cancel()
+        hideWork?.cancel()
+        guard shown else { return }
+        shown = false
+        ClipboardWindow.hidePreview(of: QuickPanel.shared.window)
+    }
+
+    private func show(_ item: ClipboardItem) {
+        guard let window = QuickPanel.shared.window else { return }
+        shown = true
+        ClipboardWindow.showPreview(item, beside: window, left: true) { [weak self] inside in
+            guard let self else { return }
+            if inside { self.hideWork?.cancel() } else { self.leave() }
+        }
+    }
+}
+
 /// One row of a side column, the same for dictations, voice messages and the clipboard: the date line with the
 /// copy and delete buttons, the text under it. Highlighted under the pointer when a click does
 /// something (copies and closes the panel); the copy button copies and stays.
@@ -498,6 +557,8 @@ struct SideRow<Content: View>: View {
     /// Nil while it cannot be deleted.
     let delete: (() -> Void)?
     let action: (() -> Void)?
+    /// The pointer entering and leaving the row (the clipboard's preview).
+    var hover: ((Bool) -> Void)?
     @ViewBuilder let content: Content
     @State private var hovered = false
     @State private var copied = false
@@ -531,7 +592,10 @@ struct SideRow<Content: View>: View {
         .background(RoundedRectangle(cornerRadius: 6).fill(hovered && action != nil ? Color.primary.opacity(0.1) : .clear))
         .contentShape(Rectangle())
         .onTapGesture { action?() }
-        .onHover { hovered = $0 }
+        .onHover {
+            hovered = $0
+            hover?($0)
+        }
         .help(action == nil ? "" : String(localized: "Нажмите, чтобы скопировать"))
     }
 }

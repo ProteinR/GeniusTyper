@@ -29,7 +29,10 @@ used, and the app registers itself as a login item.
   on hover, 0.3 s, like a submenu), "История буфера ›" (`ClipboardSide`, asked 2026-10-28: the
   30 newest entries, a snapshot taken on opening and on each search, so copying, which moves an
   entry to the top, does not reorder it; search as in the history window; text in 3 lines,
-  images as thumbnails; a click copies with formatting, as ⌥⏎; "Вся история…" opens the window).
+  images as thumbnails; a click copies with formatting, as ⌥⏎; "Вся история…" opens the window;
+  the entry under the pointer opens the history window's preview on the left of the panel,
+  `ClipboardHoverPreview`: after 0.6 s, then at once from row to row; it stays while the pointer is
+  on it, so a long text can be scrolled, and goes 0.3 s after the pointer left both).
   The columns have one fixed size (`SideColumn`, 400 × 436 pt, the history's), so switching between them or
   voice texts arriving never resize the panel (it jumped, 2026-10-28), and they look the same
   (asked 2026-10-28: the margins differed): search field, rows of `SideRow` (date line with copy
