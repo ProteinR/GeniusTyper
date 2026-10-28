@@ -274,10 +274,10 @@ private final class PillView: NSView {
 /// Bars: newest on the right; a flat white line until the first sound (asked 2026-10-26: dots,
 /// dim bars and bars filling in one by one all read as "wait, loading"), then bars to the end,
 /// the quiet ones short bars, not dots. Wave: 28 thin bars scrolling, like Voice Memos. Line: a
-/// smooth line that follows the voice: it rises with the amplitude and stays up while the sound
-/// lasts, moving left with it, so loud and quiet syllables differ and a held vowel is a plateau
-/// (asked 2026-10-29: a sine under the amplitude swung up and down even through "ииии"; before
-/// that, 2026-10-27, crests on `loudness` were all full height). All three move 60 times a second while
+/// smooth oscilloscope line that swings with the voice; its crests (18 pt apart) move left with
+/// the sound and keep their height, which is the amplitude, so loud and quiet syllables differ
+/// (asked 2026-10-27: crests that ran at their own speed on `loudness` were all full height, the
+/// line looked the same for any speech). All three move 60 times a second while
 /// recording (the line at 30 moved half as fast as the preview the owner chose, 2026-10-26; bars
 /// and wave jumping 12 times a second, once per level, looked late and jerky next to the line,
 /// 2026-10-27): the bars and the wave glide left at a steady speed, the newest one on the right
@@ -292,15 +292,16 @@ private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
     static let lineHeight: CGFloat = 2
-    /// Points from one point of the line to the next.
+    /// Points from one point of the line to the next, and from one crest to the next.
     static let lineStep: CGFloat = 1.3
-    /// The line's place in silence, from the bottom: it rises from here up to the top.
-    static let lineBase: CGFloat = 6
+    static let crestSpacing: CGFloat = 18
 
     private var style = LevelStyle.bars
     private var heardSound = false
     private var smooth: CGFloat = 0
     private var target: CGFloat = 0
+    /// Frames of the line so far: its wave is fixed to the trace, so each crest moves with it.
+    private var frames = 0
     private var trace: [CGFloat] = []
     /// Loudness 0…1 of the bars, oldest first: one more than fit, the newest coming in on the right.
     private var columns: [CGFloat] = []
@@ -436,6 +437,7 @@ private final class BarsView: NSView {
         switch style {
         case .line:
             let flat = smooth == 0 && trace.allSatisfy { $0 == 0 }
+            frames += 1
             trace.removeFirst()
             trace.append(smooth)
             if !flat { updateLine() }
@@ -456,10 +458,12 @@ private final class BarsView: NSView {
 
     private func updateLine() {
         guard let lineLayer else { return }
+        let midY = bounds.height / 2
         let path = CGMutablePath()
-        let rise = bounds.height - Self.lineBase - 2
+        let first = CGFloat(frames - trace.count + 1)
         for (index, value) in trace.enumerated() {
-            let point = CGPoint(x: 1 + CGFloat(index) * Self.lineStep, y: Self.lineBase + value * rise)
+            let wave = sin((first + CGFloat(index)) * Self.lineStep / Self.crestSpacing * 2 * .pi)
+            let point = CGPoint(x: 1 + CGFloat(index) * Self.lineStep, y: midY + value * (Self.maxHeight / 2 - 2) * wave)
             if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
         }
         CATransaction.begin()
