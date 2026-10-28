@@ -188,7 +188,7 @@ final class StatusItemController: NSObject {
     }
 
     /// Under the icon, or at the top right of the screen when the icon is hidden.
-    /// `side`: "voices" or "history" opens that column (for `--menu`).
+    /// `side`: "voices", "history" or "clipboard" opens that column (for `--menu`).
     func showPanel(side: String? = nil) {
         var anchor: NSRect?
         if isIconVisible, let button = statusItem.button, let window = button.window {

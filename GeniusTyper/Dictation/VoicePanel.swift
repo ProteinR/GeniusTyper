@@ -262,7 +262,7 @@ private struct VoiceRow: View {
     let close: () -> Void
 
     var body: some View {
-        SideRow(meta: meta, text: text, delete: deletable ? { VoiceTranscripts.shared.delete(item) } : nil,
+        SideRow(meta: meta, copy: text.map { text in { copyText(text) } }, delete: deletable ? { VoiceTranscripts.shared.delete(item) } : nil,
                 action: text.map { text in { copyText(text); close() } }) {
             switch item.text {
             case .waiting:

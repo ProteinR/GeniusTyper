@@ -91,7 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let page = arguments.dropFirst(index + 1).first.flatMap(SettingsPage.init(rawValue:))
             SettingsWindow.shared.show(page: page)
         }
-        // `--menu [voices|history]`: the left-click panel, optionally with a side column open.
+        // `--menu [voices|history|clipboard]`: the left-click panel, optionally with a side column open.
         if let index = arguments.firstIndex(of: "--menu") {
             let side = arguments.dropFirst(index + 1).first
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.statusItem?.showPanel(side: side) }

@@ -26,8 +26,11 @@ used, and the app registers itself as a login item.
 - **Left click** (`QuickPanel.swift`): a short menu-like panel under the icon, built on show and
   released on close. Rows only for parts that are on: "Голосовые из Telegram ›" (its column is
   open at once when the voices are on, so they start transcribing), "История диктовок ›" (column
-  on hover, 0.3 s, like a submenu), "История буфера" (opens the history window). Both columns
-  have one fixed size (`SideColumn`, 400 × 436 pt, the history's), so switching between them or
+  on hover, 0.3 s, like a submenu), "История буфера ›" (`ClipboardSide`, asked 2026-10-28: the
+  30 newest entries, a snapshot taken on opening and on each search, so copying, which moves an
+  entry to the top, does not reorder it; search as in the history window; text in 3 lines,
+  images as thumbnails; a click copies with formatting, as ⌥⏎; "Вся история…" opens the window).
+  The columns have one fixed size (`SideColumn`, 400 × 436 pt, the history's), so switching between them or
   voice texts arriving never resize the panel (it jumped, 2026-10-28), and they look the same
   (asked 2026-10-28: the margins differed): search field, rows of `SideRow` (date line with copy
   and delete, the text under it; a click copies and closes the panel), `SideFooter` (left: "Вся
@@ -368,7 +371,7 @@ iterating. **When finished, leave no extra copies or caches behind**: only
 `~/Applications/Genius Typer.app` (`mdfind "kMDItemCFBundleIdentifier == 'com.dmemruk.GeniusTyper'"`
 shows one result), no `build/`, no DerivedData, and delete test screenshots (they show the clipboard).
 Launch arguments for screenshots: `--open-settings [general|typing|clipboard|dictation|history|statistics]`,
-`--menu [voices|history]` (a running instance ignores them: quit it first).
+`--menu [voices|history|clipboard]` (a running instance ignores them: quit it first).
 
 ## Menu bar icon
 

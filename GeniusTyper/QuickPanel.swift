@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 /// What the menu bar icon's left click opens: a short menu-like panel under the icon. Only what is
-/// used daily: the dictation and clipboard histories, the Telegram voices (a second column beside
-/// it, open at once when they are on, so the latest ones start transcribing), "Исправлять текст"
+/// used daily: the dictation and clipboard histories and the Telegram voices (each a second column
+/// beside it, the voices open at once when they are on, so the latest ones start transcribing), "Исправлять текст"
 /// for everything typed and for the app in front, the settings and quit. Rows of switched-off
 /// parts are not shown. Built on show and released on close; Esc, a click elsewhere or the icon
 /// again closes it. Does not take the focus from the app in front, but becomes key so the history
@@ -120,9 +120,9 @@ final class QuickPanel {
     }
 }
 
-private enum Side: String { case voices, history }
+private enum Side: String { case voices, history, clipboard }
 
-/// The size of both side columns (voices and history) and of their lists, so switching between
+/// The size of the side columns (voices, dictations, clipboard) and of their lists, so switching between
 /// them or new voice texts arriving never resize the panel (it jumped, 2026-10-28).
 /// The whole column has a fixed size and its list takes what is left (the footers differ: a link
 /// under the history, a status line under the voices).
@@ -151,6 +151,9 @@ private struct QuickMenuView: View {
                 Divider()
             case .history:
                 HistorySide(close: close)
+                Divider()
+            case .clipboard:
+                ClipboardSide(close: close)
                 Divider()
             case nil:
                 EmptyView()
@@ -181,10 +184,10 @@ private struct QuickMenuView: View {
                 } hover: { side = .history }
             }
             if clipboard.enabled {
-                MenuRow(icon: "doc.on.clipboard", title: "История буфера", detail: clipboard.hotKey.title) {
-                    close()
-                    DispatchQueue.main.async { ClipboardWindow.show() }
-                } hover: { side = nil }
+                MenuRow(icon: "doc.on.clipboard", title: "История буфера", detail: clipboard.hotKey.title,
+                        opens: true, selected: side == .clipboard) {
+                    side = .clipboard
+                } hover: { side = .clipboard }
             }
             if dictation || clipboard.enabled { Divider().padding(.vertical, 4) }
 
@@ -340,7 +343,7 @@ private struct HistorySide: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 2) {
                             ForEach(items) { entry in
-                                SideRow(meta: meta(entry), text: entry.text, delete: {
+                                SideRow(meta: meta(entry), copy: { copyText(entry.text) }, delete: {
                                     History.shared.delete(id: entry.id)
                                     load()
                                 }, action: {
@@ -383,13 +386,115 @@ private struct HistorySide: View {
     }
 }
 
-/// One row of a side column, the same for dictations and voice messages: the date line with the
+/// The clipboard column, laid out like the dictations: search (also in the wrong layout, as in the
+/// history window), the newest entries, a click copies; the whole history is in its window. A
+/// snapshot of the entries, taken on opening and on each search: the panel does not observe
+/// `ClipboardStore.items`, and copying an entry (which moves it to the top) does not reorder the list.
+private struct ClipboardSide: View {
+    let close: () -> Void
+    @State private var search = ""
+    @State private var items: [ClipboardItem] = []
+    @FocusState private var focused: Bool
+    private let store = ClipboardStore.shared
+
+    private static let limit = 30
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Поиск по буферу", text: $search)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+            Group {
+                if items.isEmpty {
+                    Text(search.isEmpty ? "История пуста" : "Ничего не найдено")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(items) { item in
+                                SideRow(meta: meta(item), copy: { copy(item) }, delete: {
+                                    store.delete(item)
+                                    load()
+                                }, action: {
+                                    copy(item)
+                                    close()
+                                }) {
+                                    content(item)
+                                }
+                            }
+                        }
+                        .padding(.trailing, 14) // room for the scroll bar
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .topLeading)
+            SideFooter(shortcut: store.hotKey.title) {
+                Button("Вся история…") {
+                    close()
+                    DispatchQueue.main.async { ClipboardWindow.show() }
+                }
+                .buttonStyle(.link)
+            }
+        }
+        .padding(10)
+        .frame(width: SideColumn.width, height: SideColumn.height)
+        .onAppear {
+            load()
+            focused = true
+        }
+        .onChange(of: search) { load() }
+    }
+
+    @ViewBuilder private func content(_ item: ClipboardItem) -> some View {
+        switch item.kind {
+        case .image:
+            if let thumbnail = store.thumbnail(item) {
+                Image(nsImage: thumbnail)
+                    .resizable().scaledToFit()
+                    .frame(maxHeight: 60, alignment: .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            } else {
+                Text(item.title)
+            }
+        case .files:
+            Label(item.title, systemImage: "doc").lineLimit(2)
+        case .text:
+            // The beginning is enough for three lines (a long text laid out whole is slow).
+            Text(String((item.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).prefix(400))).lineLimit(3)
+        }
+    }
+
+    private func load() {
+        let query = search.trimmingCharacters(in: .whitespaces)
+        if query.isEmpty {
+            items = Array(store.items.prefix(Self.limit))
+        } else {
+            let alternative = ClipboardRules.retyped(query, renderer: Observer.shared.layouts)
+            items = Array(store.items.lazy.filter { ClipboardRules.matches($0, query: query, alternative: alternative) }.prefix(Self.limit))
+        }
+    }
+
+    /// Onto the pasteboard with its formatting, as ⌥⏎ in the history window.
+    private func copy(_ item: ClipboardItem) {
+        store.use(item, paste: false, plain: false)
+        Sounds.play(.success)
+    }
+
+    private func meta(_ item: ClipboardItem) -> String {
+        let date = item.date.formatted(.relative(presentation: .named))
+        guard let app = store.appName(item.app) else { return date }
+        return "\(date) · \(app)"
+    }
+}
+
+/// One row of a side column, the same for dictations, voice messages and the clipboard: the date line with the
 /// copy and delete buttons, the text under it. Highlighted under the pointer when a click does
 /// something (copies and closes the panel); the copy button copies and stays.
 struct SideRow<Content: View>: View {
     let meta: String
     /// Nil while there is nothing to copy (a voice message still transcribed).
-    let text: String?
+    let copy: (() -> Void)?
     /// Nil while it cannot be deleted.
     let delete: (() -> Void)?
     let action: (() -> Void)?
@@ -402,9 +507,9 @@ struct SideRow<Content: View>: View {
             HStack(spacing: 8) {
                 Text(meta).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                if let text {
+                if let copy {
                     Button {
-                        copyText(text)
+                        copy()
                         copied = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
                     } label: {
