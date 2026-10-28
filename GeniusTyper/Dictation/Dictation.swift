@@ -30,7 +30,7 @@ final class Dictation: ObservableObject {
         if on {
             start()
             let store = EngineStore.shared
-            if store.selected.isLocal, store.local == .missing { store.downloadLocal() }
+            if store.selected.isLocal, store.local == .missing { store.downloadLocal(store.selected) }
             if AudioRecorder.permission == .notDetermined { Task { _ = await AudioRecorder.requestPermission() } }
         } else {
             cancel(reason: "dictation off")

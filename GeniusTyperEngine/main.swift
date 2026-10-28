@@ -42,7 +42,8 @@ func readSamples() -> [Float]? {
     return body.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
 }
 
-let version: AsrModelVersion = .v3
+// Second argument: the model, "v3" (default) or "ultra" (Moondream's post-trained v3).
+let version: AsrModelVersion = CommandLine.arguments.dropFirst(2).first == "ultra" ? .ultra : .v3
 
 switch CommandLine.arguments.dropFirst().first {
 case "download":
@@ -81,6 +82,6 @@ case "serve":
     exit(0)
 
 default:
-    FileHandle.standardError.write("usage: GeniusTyperEngine download | serve\n".data(using: .utf8)!)
+    FileHandle.standardError.write("usage: GeniusTyperEngine download | serve [v3 | ultra]\n".data(using: .utf8)!)
     exit(2)
 }

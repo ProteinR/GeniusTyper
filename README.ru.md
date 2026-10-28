@@ -74,8 +74,11 @@
 
 - **Правый ⌥** (можно сменить): удерживать — говорить, или нажать, чтобы начать, и нажать ещё раз,
   чтобы закончить. Esc отменяет.
-- **Локально**: NVIDIA Parakeet TDT 0.6B v3 (25 европейских языков, определяются сами) через
-  [FluidAudio](https://github.com/FluidInference/FluidAudio) на Neural Engine. Модель работает во
+- **Локально**: Parakeet Ultra (дообученная Moondream модель NVIDIA Parakeet TDT 0.6B v3, по
+  умолчанию) или сама Parakeet v3 (25 европейских языков, определяются сами) через
+  [FluidAudio](https://github.com/FluidInference/FluidAudio) на Neural Engine. Ultra так же быстра и
+  заметно точнее (на митингах автора и уроке английского там, где модели расходились, Whisper был на
+  стороне Ultra 216 раз, на стороне v3 — 71), на диске ~630 МБ вместо ~470 МБ. Модель работает во
   вспомогательном процессе, который завершается после нескольких минут простоя, — память не занята.
 - **Облако, по желанию**: Groq, OpenAI или любой OpenAI-совместимый `/audio/transcriptions` с
   вашим ключом (хранится в связке ключей).
@@ -234,7 +237,7 @@ Maccy тоже занимает ⇧⌘C: закройте его или смен
 - Голосовые читаются из кэша официального Telegram для macOS (`ru.keepcoder.Telegram`); находятся
   только файлы, которые Telegram уже скачал.
 - Словарь ё собран из [eyo-kernel](https://github.com/hcodes/eyo-kernel) (MIT,
-  `GeniusTyper/yo-LICENSE.txt`). Модель Parakeet — NVIDIA, CC BY 4.0.
+  `GeniusTyper/yo-LICENSE.txt`). Parakeet v3 — NVIDIA, Parakeet Ultra — Moondream, обе CC BY 4.0.
 - Анимации диктовки (кот в парике, Брюс Всемогущий) сделаны из популярных GIF и фрагмента
   фильма; лицензия MIT на них не распространяется, права принадлежат их владельцам.
 

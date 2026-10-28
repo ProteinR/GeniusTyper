@@ -72,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Prefs.dictationEnabled {
             Dictation.shared.start()
             let store = EngineStore.shared
-            if store.selected.isLocal, store.local == .missing { store.downloadLocal() }
+            if store.selected.isLocal, store.local == .missing { store.downloadLocal(store.selected) }
             if AudioRecorder.permission == .notDetermined { Task { _ = await AudioRecorder.requestPermission() } }
         }
 

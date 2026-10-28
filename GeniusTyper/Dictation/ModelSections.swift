@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// The model on the Диктовка page: the local one (download, unload) or one by API.
+/// The model on the Диктовка page: a local one (download, unload) or one by API.
 struct ModelSections: View {
     @ObservedObject private var store = EngineStore.shared
 
     var body: some View {
         Section("Модель на этом Mac") {
-            LocalModelRow()
+            ForEach(EngineID.local) { model in
+                LocalModelRow(model: model)
+            }
             LabeledContent {
                 Menu {
                     ForEach([1, 5, 15, 60, 0], id: \.self) { minutes in
@@ -62,35 +64,43 @@ private struct SelectMark: View {
 }
 
 private struct LocalModelRow: View {
+    let model: EngineID
     @ObservedObject private var store = EngineStore.shared
     @State private var confirmDelete = false
 
+    private var vendor: String { model == .parakeetUltra ? "Moondream, дообученная v3" : "NVIDIA" }
+    private var note: String {
+        model == .parakeetUltra
+            ? String(localized: "~630 МБ на диске · Neural Engine · точнее v3, особенно английский с акцентом")
+            : String(localized: "~470 МБ на диске · Neural Engine")
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            Button { store.selected = .parakeetV3 } label: { SelectMark(selected: store.selected == .parakeetV3) }
+            Button { choose() } label: { SelectMark(selected: store.selected == model) }
                 .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(EngineID.parakeetV3.title)
-                    Text("NVIDIA").font(.caption).foregroundStyle(.secondary)
+                    Text(model.title)
+                    Text(vendor).font(.caption).foregroundStyle(.secondary)
                 }
-                Text("~470 МБ на диске · Neural Engine")
+                Text(note)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if case .failed(let message) = store.local {
+                if case .failed(let message) = store.local(model) {
                     Text(message).font(.caption).foregroundStyle(.red)
                 }
             }
             Spacer()
-            switch store.local {
+            switch store.local(model) {
             case .missing:
-                Button("Скачать") { store.downloadLocal() }
+                Button("Скачать") { store.downloadLocal(model) }
             case .downloading(let fraction):
                 ProgressView(value: fraction).frame(width: 80)
                 Text("\(Int(fraction * 100))%").monospacedDigit().foregroundStyle(.secondary)
             case .failed:
-                Button(ParakeetEngine.isDownloaded ? "Удалить" : "Повторить") {
-                    ParakeetEngine.isDownloaded ? (confirmDelete = true) : store.downloadLocal()
+                Button(ParakeetEngine.isDownloaded(model) ? "Удалить" : "Повторить") {
+                    ParakeetEngine.isDownloaded(model) ? (confirmDelete = true) : store.downloadLocal(model)
                 }
             case .onDisk, .loading, .loaded:
                 Text("Скачана").foregroundStyle(.secondary)
@@ -98,12 +108,18 @@ private struct LocalModelRow: View {
             }
         }
         .contentShape(Rectangle())
-        .onTapGesture { store.selected = .parakeetV3 }
+        .onTapGesture { choose() }
         .confirmationDialog("Удалить модель с диска?", isPresented: $confirmDelete) {
-            Button("Удалить", role: .destructive) { store.deleteLocal() }
+            Button("Удалить", role: .destructive) { store.deleteLocal(model) }
         } message: {
             Text("Её можно будет скачать снова.")
         }
+    }
+
+    /// Choosing a model not on disk yet starts its download.
+    private func choose() {
+        store.selected = model
+        if store.local(model) == .missing { store.downloadLocal(model) }
     }
 }
 
@@ -165,6 +181,6 @@ private struct CloudRow: View {
         hasKey = !key.isEmpty
         if !model.isEmpty { store.setModel(model, for: id) }
         if id == .custom { store.setBaseURL(baseURL, for: id) }
-        if !hasKey, store.selected == id { store.selected = .parakeetV3 }
+        if !hasKey, store.selected == id { store.selected = .parakeetUltra }
     }
 }

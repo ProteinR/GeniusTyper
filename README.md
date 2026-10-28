@@ -77,8 +77,11 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 ### Dictation (Diktant)
 
 - **Right ⌥** (changeable): hold to talk, or tap to start and tap again to stop. Esc cancels.
-- **Local**: NVIDIA Parakeet TDT 0.6B v3 (25 European languages, automatic detection) via
-  [FluidAudio](https://github.com/FluidInference/FluidAudio) on the Neural Engine. It runs in a helper
+- **Local**: Parakeet Ultra (Moondream's post-trained NVIDIA Parakeet TDT 0.6B v3, the default) or
+  Parakeet v3 itself (25 European languages, automatic detection) via
+  [FluidAudio](https://github.com/FluidInference/FluidAudio) on the Neural Engine. Ultra is as fast
+  and noticeably more accurate (on the author's meetings and an English lesson: Whisper sided with
+  Ultra 216 times and with v3 71 times where the two differed), at ~630 MB on disk instead of ~470 MB. It runs in a helper
   process that exits after a few idle minutes, so the model does not sit in memory.
 - **Cloud, optional**: Groq, OpenAI or any OpenAI-compatible `/audio/transcriptions` service with
   your own key (stored in the Keychain).
@@ -236,7 +239,7 @@ takes ⇧⌘C; quit it or change the shortcut.
 - Telegram voice messages are read from the cache of the official Telegram for macOS app
   (`ru.keepcoder.Telegram`); only files Telegram has downloaded are found.
 - The ё dictionary is built from [eyo-kernel](https://github.com/hcodes/eyo-kernel) (MIT,
-  `GeniusTyper/yo-LICENSE.txt`). The Parakeet model is NVIDIA's, CC BY 4.0.
+  `GeniusTyper/yo-LICENSE.txt`). Parakeet v3 is NVIDIA's, Parakeet Ultra is Moondream's, both CC BY 4.0.
 - The dictation animations (a cat in a wig, Bruce Almighty) are made from widely shared GIFs and
   a film clip; they are not covered by the MIT license and belong to their owners.
 

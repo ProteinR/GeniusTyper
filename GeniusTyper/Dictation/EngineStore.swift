@@ -1,6 +1,6 @@
 import Foundation
 
-/// Which engine dictation uses, the local model's state (downloaded, in memory) and the cloud
+/// Which engine dictation uses, the local models' state (downloaded, in memory) and the cloud
 /// engines' settings. The local model is loaded when recording starts and unloaded after
 /// `Prefs.unloadAfterMinutes` without dictation: a single one-shot timer, nothing polls.
 @MainActor
@@ -20,10 +20,12 @@ final class EngineStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(selected.rawValue, forKey: "engine")
             Log.info("Engine: \(selected.rawValue)", "engine")
-            if !selected.isLocal { unloadNow() }
+            // Another model (or a cloud engine): the helper holding the old one goes.
+            if selected != oldValue { unloadNow() }
         }
     }
-    @Published private(set) var local: LocalState = .missing
+    /// State of each local model (`EngineID.local`).
+    @Published private(set) var locals: [EngineID: LocalState] = [:]
     @Published var unloadAfterMinutes = Prefs.unloadAfterMinutes {
         didSet {
             Prefs.unloadAfterMinutes = unloadAfterMinutes
@@ -36,65 +38,74 @@ final class EngineStore: ObservableObject {
     private var unloadTimer: DispatchWorkItem?
 
     private init() {
-        selected = EngineID(rawValue: UserDefaults.standard.string(forKey: "engine") ?? "") ?? .parakeetV3
+        selected = EngineID(rawValue: UserDefaults.standard.string(forKey: "engine") ?? "") ?? .parakeetUltra
         refreshLocal()
     }
 
+    func local(_ model: EngineID) -> LocalState { locals[model] ?? .missing }
+
+    /// The selected local model's state (`.missing` while a cloud engine is selected).
+    var local: LocalState { selected.isLocal ? local(selected) : .missing }
+
     func refreshLocal() {
-        switch local {
-        case .downloading, .loading, .loaded: return
-        default: local = ParakeetEngine.isDownloaded ? .onDisk : .missing
-        }
-    }
-
-    var isDownloading: Bool {
-        if case .downloading = local { return true }
-        return false
-    }
-
-    /// Downloads the local model (~470 MB) from Hugging Face into Application Support/FluidAudio.
-    func downloadLocal() {
-        guard !isDownloading else { return }
-        local = .downloading(0)
-        Log.info("Parakeet download started", "engine")
-        Task {
-            do {
-                try await ParakeetEngine.download { fraction in
-                    Task { @MainActor in
-                        if case .downloading = EngineStore.shared.local { EngineStore.shared.local = .downloading(fraction) }
-                    }
-                }
-                local = .onDisk
-                Log.info("Parakeet downloaded", "engine")
-            } catch {
-                local = .failed(String(localized: "Не удалось скачать: \(error.localizedDescription)"))
-                Log.error("Parakeet download failed: \(Log.describe(error))", "engine")
+        for model in EngineID.local {
+            switch local(model) {
+            case .downloading, .loading, .loaded: continue
+            default: locals[model] = ParakeetEngine.isDownloaded(model) ? .onDisk : .missing
             }
         }
     }
 
-    func deleteLocal() {
-        unloadNow()
-        try? FileManager.default.removeItem(at: ParakeetEngine.directory)
-        local = .missing
-        Log.info("Parakeet deleted from disk", "engine")
+    func isDownloading(_ model: EngineID) -> Bool {
+        if case .downloading = local(model) { return true }
+        return false
+    }
+
+    /// Downloads a local model from Hugging Face into Application Support/FluidAudio.
+    func downloadLocal(_ model: EngineID) {
+        guard !isDownloading(model) else { return }
+        locals[model] = .downloading(0)
+        Log.info("\(model.title) download started", "engine")
+        Task {
+            do {
+                try await ParakeetEngine.download(model) { fraction in
+                    Task { @MainActor in
+                        let store = EngineStore.shared
+                        if store.isDownloading(model) { store.locals[model] = .downloading(fraction) }
+                    }
+                }
+                locals[model] = .onDisk
+                Log.info("\(model.title) downloaded", "engine")
+            } catch {
+                locals[model] = .failed(String(localized: "Не удалось скачать: \(error.localizedDescription)"))
+                Log.error("\(model.title) download failed: \(Log.describe(error))", "engine")
+            }
+        }
+    }
+
+    func deleteLocal(_ model: EngineID) {
+        if selected == model { unloadNow() }
+        try? FileManager.default.removeItem(at: ParakeetEngine.directory(model))
+        locals[model] = .missing
+        Log.info("\(model.title) deleted from disk", "engine")
     }
 
     /// Recording started: get the local model into memory while the user speaks.
     func prepare() {
         unloadTimer?.cancel()
-        guard selected.isLocal, loadTask == nil else { return }
-        guard ParakeetEngine.isDownloaded else { return }
-        if local != .loaded { local = .loading }
+        let model = selected
+        guard model.isLocal, loadTask == nil else { return }
+        guard ParakeetEngine.isDownloaded(model) else { return }
+        if local(model) != .loaded { locals[model] = .loading }
         let parakeet = parakeet
         loadTask = Task {
             do {
-                try await parakeet.load()
-                self.local = .loaded
+                try await parakeet.load(model)
+                self.locals[model] = .loaded
             } catch {
                 self.loadTask = nil
-                self.local = .failed(String(localized: "Не удалось загрузить модель: \(error.localizedDescription)"))
-                Log.error("Parakeet load failed: \(Log.describe(error))", "engine")
+                self.locals[model] = .failed(String(localized: "Не удалось загрузить модель: \(error.localizedDescription)"))
+                Log.error("\(model.title) load failed: \(Log.describe(error))", "engine")
                 throw error
             }
         }
@@ -107,7 +118,7 @@ final class EngineStore: ObservableObject {
             case .missing: return String(localized: "Модель не скачана — откройте настройки")
             case .downloading(let fraction): return String(localized: "Модель скачивается: \(Int(fraction * 100))%")
             // A failed load is tried again on the next recording.
-            case .failed(let message): return ParakeetEngine.isDownloaded ? nil : message
+            case .failed(let message): return ParakeetEngine.isDownloaded(selected) ? nil : message
             default: return nil
             }
         }
@@ -118,9 +129,10 @@ final class EngineStore: ObservableObject {
     func transcribe(_ samples: [Float]) async throws -> String {
         defer { scheduleUnload() }
         if selected.isLocal {
+            let model = selected
             prepare()
             try await loadTask?.value
-            return try await parakeet.transcribe(samples)
+            return try await parakeet.transcribe(samples, model: model)
         }
         let engine = CloudEngine(id: selected, baseURL: baseURL(for: selected), model: model(for: selected),
                                  key: Keychain.key(for: selected))
@@ -146,7 +158,7 @@ final class EngineStore: ObservableObject {
         let parakeet = parakeet
         Task {
             await parakeet.unload()
-            if self.local == .loaded || self.local == .loading { self.local = .onDisk }
+            for (model, state) in self.locals where state == .loaded || state == .loading { self.locals[model] = .onDisk }
             Memory.giveBackSoon()
         }
     }

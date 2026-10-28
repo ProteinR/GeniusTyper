@@ -34,7 +34,7 @@ extension AppDelegate {
                 }
             }
             @MainActor func model() {
-                guard ParakeetEngine.isDownloaded else {
+                guard ParakeetEngine.isDownloaded(EngineStore.shared.selected) else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) { MainActor.assumeIsolated { round() } }
                     return
                 }

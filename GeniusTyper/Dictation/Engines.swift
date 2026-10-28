@@ -2,17 +2,21 @@ import Darwin
 import Foundation
 import Security
 
-/// Speech-to-text engines. One local (Parakeet on the Neural Engine) and cloud ones through the
-/// OpenAI-compatible `/audio/transcriptions` API (Groq, OpenAI, any compatible service).
+/// Speech-to-text engines. Local ones (Parakeet on the Neural Engine: NVIDIA's v3 and Moondream's
+/// Ultra, a post-trained v3) and cloud ones through the OpenAI-compatible `/audio/transcriptions`
+/// API (Groq, OpenAI, any compatible service).
 enum EngineID: String, CaseIterable, Identifiable {
-    case parakeetV3, groq, openAI, custom
+    case parakeetUltra, parakeetV3, groq, openAI, custom
     var id: String { rawValue }
 
-    var isLocal: Bool { self == .parakeetV3 }
+    static let local: [EngineID] = [.parakeetUltra, .parakeetV3]
+
+    var isLocal: Bool { Self.local.contains(self) }
 
     /// Name in the settings and in the history.
     var title: String {
         switch self {
+        case .parakeetUltra: return "Parakeet Ultra"
         case .parakeetV3: return "Parakeet TDT 0.6B v3"
         case .groq: return "Groq"
         case .openAI: return "OpenAI"
@@ -32,7 +36,7 @@ enum EngineID: String, CaseIterable, Identifiable {
         switch self {
         case .groq: return "https://api.groq.com/openai/v1"
         case .openAI: return "https://api.openai.com/v1"
-        case .parakeetV3, .custom: return ""
+        case .parakeetUltra, .parakeetV3, .custom: return ""
         }
     }
 
@@ -40,12 +44,15 @@ enum EngineID: String, CaseIterable, Identifiable {
         switch self {
         case .groq: return "whisper-large-v3-turbo"
         case .openAI: return "gpt-4o-transcribe"
-        case .parakeetV3, .custom: return ""
+        case .parakeetUltra, .parakeetV3, .custom: return ""
         }
     }
+
+    /// The local model's name for GeniusTyperEngine (its second argument).
+    var helperModel: String { self == .parakeetUltra ? "ultra" : "v3" }
 }
 
-/// Parakeet TDT 0.6B v3, run by the GeniusTyperEngine helper (FluidAudio, Neural Engine). The helper is
+/// A local Parakeet model (v3 or Ultra), run by the GeniusTyperEngine helper (FluidAudio, Neural Engine). The helper is
 /// started when recording starts (the model loads while the user speaks) and stopped after a pause
 /// (`EngineStore`): loading the model leaves ~30 MB of fragmented memory that a running process
 /// never gives back to macOS, so it is a separate process that exits with the model.
@@ -54,15 +61,18 @@ actor ParakeetEngine {
     private var input: FileHandle?
     private var reader: LineReader?
     private var loading: Task<Void, Error>?
+    /// The model the running helper has loaded.
+    private var model: EngineID?
 
-    /// FluidAudio's model folder (`AsrModels.defaultCacheDirectory(for: .v3)`).
-    static var directory: URL {
+    /// FluidAudio's model folder (`AsrModels.defaultCacheDirectory(for: .v3 / .ultra)`).
+    static func directory(_ model: EngineID) -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("FluidAudio/Models/parakeet-tdt-0.6b-v3", isDirectory: true)
+            .appendingPathComponent(model == .parakeetUltra ? "FluidAudio/Models/parakeet-ultra" : "FluidAudio/Models/parakeet-tdt-0.6b-v3",
+                                    isDirectory: true)
     }
 
-    static var isDownloaded: Bool {
-        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+    static func isDownloaded(_ model: EngineID) -> Bool {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory(model).path)) ?? []
         return ["Preprocessor.mlmodelc", "Encoder.mlmodelc", "Decoder.mlmodelc", "JointDecisionv3.mlmodelc"].allSatisfy(files.contains)
             && files.contains { $0.hasSuffix("vocab.json") }
     }
@@ -79,9 +89,9 @@ actor ParakeetEngine {
         return result == 0 ? Double(info.ri_phys_footprint) / 1_048_576 : nil
     }
 
-    /// Downloads the model (~470 MB) from Hugging Face into FluidAudio's folder.
-    static func download(progress: @escaping @Sendable (Double) -> Void) async throws {
-        let (process, _, reader) = try launch("download")
+    /// Downloads the model (v3 ~470 MB, Ultra ~630 MB) from Hugging Face into FluidAudio's folder.
+    static func download(_ model: EngineID, progress: @escaping @Sendable (Double) -> Void) async throws {
+        let (process, _, reader) = try launch("download", model)
         defer { if process.isRunning { process.terminate() } }
         while let json = await reader.nextJSON() {
             if let fraction = json["progress"] as? Double { progress(fraction) }
@@ -91,10 +101,11 @@ actor ParakeetEngine {
         throw EngineError(String(localized: "Загрузка прервалась"))
     }
 
-    func load() async throws {
-        if let loading, process?.isRunning == true { return try await loading.value }
+    func load(_ model: EngineID) async throws {
+        if let loading, process?.isRunning == true, self.model == model { return try await loading.value }
         stop()
-        let task = Task { try await start() }
+        self.model = model
+        let task = Task { try await start(model) }
         loading = task
         do {
             try await task.value
@@ -104,18 +115,18 @@ actor ParakeetEngine {
         }
     }
 
-    private func start() async throws {
-        let (process, input, reader) = try Self.launch("serve")
+    private func start(_ model: EngineID) async throws {
+        let (process, input, reader) = try Self.launch("serve", model)
         self.process = process
         self.input = input
         self.reader = reader
         guard let json = await reader.nextJSON() else { throw EngineError(String(localized: "Модель не запустилась")) }
         if let error = json["error"] as? String { throw EngineError(error) }
-        Log.info(String(format: "Parakeet loaded in %.2f s (helper pid %d)", json["seconds"] as? Double ?? 0, process.processIdentifier), "engine")
+        Log.info(String(format: "%@ loaded in %.2f s (helper pid %d)", model.title, json["seconds"] as? Double ?? 0, process.processIdentifier), "engine")
     }
 
-    func transcribe(_ samples: [Float]) async throws -> String {
-        try await load()
+    func transcribe(_ samples: [Float], model: EngineID) async throws -> String {
+        try await load(model)
         guard let input, let reader else { throw EngineError(String(localized: "Модель не запустилась")) }
         var data = Data(capacity: 4 + samples.count * 4)
         withUnsafeBytes(of: UInt32(samples.count).littleEndian) { data.append(contentsOf: $0) }
@@ -152,15 +163,16 @@ actor ParakeetEngine {
         input = nil
         reader = nil
         loading = nil
+        model = nil
     }
 
-    private static func launch(_ mode: String) throws -> (Process, FileHandle, LineReader) {
+    private static func launch(_ mode: String, _ model: EngineID) throws -> (Process, FileHandle, LineReader) {
         guard let url = Bundle.main.url(forAuxiliaryExecutable: "GeniusTyperEngine") else {
             throw EngineError(String(localized: "Нет GeniusTyperEngine в приложении"))
         }
         let process = Process()
         process.executableURL = url
-        process.arguments = [mode]
+        process.arguments = [mode, model.helperModel]
         let stdin = Pipe(), stdout = Pipe()
         process.standardInput = stdin
         process.standardOutput = stdout

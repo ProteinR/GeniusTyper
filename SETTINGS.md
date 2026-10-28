@@ -50,7 +50,7 @@ defaults write com.dmemruk.GeniusTyper autoOffApps -array-add com.sublimetext.4
 |---|---|---|---|
 | `dictationEnabled` | bool | `false` | The Диктовка switch: off = no key watched, no microphone, no model. |
 | `dictationShortcut` | data (JSON) | right ⌥ | `{"keyCode": 61, "modifiers": 0}`; `modifiers` 0 = a modifier key alone. |
-| `engine` | string | `parakeetV3` | `parakeetV3` (local), `groq`, `openAI`, `custom`. |
+| `engine` | string | `parakeetUltra` | `parakeetUltra`, `parakeetV3` (local), `groq`, `openAI`, `custom`. |
 | `baseURL.<engine>` | string | the service's | Address of an OpenAI-compatible API (`baseURL.custom` for "Другой сервис"). |
 | `model.<engine>` | string | the service's | Model name, e.g. `model.groq` = `whisper-large-v3-turbo`. |
 | `unloadAfterMinutes` | int | `5` | The local model leaves memory after this many idle minutes; `0` = never. |

@@ -13,7 +13,7 @@ enum Prefs {
             "dictationSounds": true,
             "escCancels": true,
             "unloadAfterMinutes": 5,
-            "engine": EngineID.parakeetV3.rawValue,
+            "engine": EngineID.parakeetUltra.rawValue,
         ])
     }
 

@@ -154,20 +154,31 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   is held cancels silently (it was ⌥+key). Start sound and pill come 0.15 s late for that reason.
 - **Recording** (`AudioRecorder`): default microphone via `AVAudioEngine`, converted to 16 kHz
   mono; the engine exists only while recording. Shorter than 0.3 s is dropped.
-- **Engines**: local **Parakeet TDT 0.6B v3** (NVIDIA, FluidAudio 0.17.7, CoreML on the Neural
-  Engine, 25 European languages with automatic detection; RU/EN is what matters) and cloud ones via
+- **Engines**: local **Parakeet Ultra** (default since 0.18.0, `parakeetUltra`; Moondream's
+  post-trained v3, same architecture and speed, int8 encoder, ~630 MB, folder
+  `FluidAudio/Models/parakeet-ultra`) or **Parakeet TDT 0.6B v3** (NVIDIA, `parakeetV3`, ~470 MB)
+  (FluidAudio 0.17.7, CoreML on the Neural Engine, 25 European languages with automatic detection;
+  RU/EN is what matters). Each local model is a row in Диктовка with its own download/delete;
+  choosing one not on disk downloads it; switching restarts the helper (`serve ultra|v3`). Chosen
+  on 2026-10-28 after a comparison on the owner's meetings and an English lesson (2 h 15 min, 482
+  chunks ≤25 s): same speed (61 vs 65 s) and helper memory; where they differed (21 % of words)
+  Whisper turbo sided with Ultra 216 times, with v3 71; Ultra much better on the owner's accented
+  English ("gravitate", "communicate" where v3 heard "predicate", "integrate"), a little better on
+  Russian (English terms in Latin: "editable", "Inventory List"), fewer uh/um; its slips: rare
+  Ukrainian letters (є, і), 6 `<unk>` against 1. Whisper transcripts are no reference (they
+  hallucinate in silence, guess wrong languages, smooth speech). Cloud ones via
   the OpenAI-compatible `/audio/transcriptions` (Groq `whisper-large-v3-turbo`, OpenAI
   `gpt-4o-transcribe`, "Другой сервис" with its own address); keys in the login Keychain
   (`Keychain`). Not used yet beyond the code; the owner may want Groq/OpenAI later.
 - **The model runs in a helper process** `Contents/MacOS/GeniusTyperEngine` (`GeniusTyperEngine/main.swift`;
-  only it links FluidAudio). Genius Typer starts it when recording starts (the model loads in ~0.2 s
+  only it links FluidAudio; second argument `v3` or `ultra`). Genius Typer starts it when recording starts (the model loads in ~0.2 s
   while the user speaks), sends samples over stdin, reads JSON lines from stdout, and closes its
   stdin after `Prefs.unloadAfterMinutes` (default 5; 1/5/15/60/never) without dictation, so it
   exits. Why: loading the model in-process left ~30 MB of fragmented malloc memory that
   `malloc_zone_pressure_relief` could not give back (54 MB idle forever after the first
-  dictation, `PROFILING.md`). The helper also downloads the model (`download` mode, ~470 MB into
-  `~/Library/Application Support/FluidAudio/Models/parakeet-tdt-0.6b-v3`, started automatically on
-  first launch). The first load ever compiles the model for the Neural Engine (one-time, >10 s;
+  dictation, `PROFILING.md`). The helper also downloads the model (`download` mode, into
+  `~/Library/Application Support/FluidAudio/Models/parakeet-ultra` or `parakeet-tdt-0.6b-v3`; the
+  selected one is started automatically on first launch). The first load ever compiles the model for the Neural Engine (one-time, >10 s;
   cached by macOS in `~/Library/Caches/com.apple.e5rt.e5bundlecache`, survives rebuilds).
 - **Paste** (`Paster`): text to the clipboard marked `org.nspasteboard.TransientType` (the clipboard history skips it), ⌘V posted, previous clipboard restored 0.5 s after the app
   read the text (a data provider hands it over on request; 5 s if nobody asks) unless something
