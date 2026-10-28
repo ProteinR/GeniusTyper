@@ -217,12 +217,12 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   louder ones at the top). The log has "Level scale for <mic>" after each dictation.
   **Level style** (`LevelStyle`, Диктовка → Индикатор, asked 2026-10-26 after an interactive
   preview of six): "Полоски" (above, default), "Плотная волна" (28 thin bars scrolling, a dotted
-  line in silence, like Voice Memos) and "Линия" (a smooth oscilloscope line that swings with the
-  voice; since 2026-10-27 its crests are 18 pt apart, move left with the sound and keep their
-  height, which is the amplitude, `LevelScale.amplitude`, not the bars' loudness: speech swings
-  about half way, stressed syllables to the top; asked after a recording and an interactive
-  preview against the old line, whose crests ran at their own speed and were nearly all full
-  height; its own 60 fps timer only while recording, the speed of the preview; a `CAShapeLayer`
+  line in silence, like Voice Memos) and "Линия" (a smooth line that follows the voice: 6 pt
+  from the bottom in silence, it rises with the amplitude (`LevelScale.amplitude`, not the bars'
+  loudness: speech about half way, stressed syllables to the top) and stays up while the sound
+  lasts, moving left with it; asked 2026-10-29: a sine under the amplitude swung up and down even
+  through a held "ииии"; before that, 2026-10-27, its crests ran at their own speed on loudness
+  and were nearly all full height; its own 60 fps timer only while recording, the speed of the preview; a `CAShapeLayer`
   gets a new path each frame and the view is never redrawn: ~3 % CPU, ~9.5 % when it was drawn in
   `draw(_:)`; stopped on hide). The bars and the wave are one `CALayer` per bar, no `draw(_:)`
   either, and since 2026-10-27 move on the same 60 fps timer (asked: jumping once per level, 12
