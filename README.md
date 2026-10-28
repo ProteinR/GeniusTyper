@@ -84,7 +84,8 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
   microphone and the room, and is remembered per microphone), ё restored in the text,
   history with search and statistics (words, words per minute, time saved).
 - **Telegram voice messages**: the newest voice messages from the official Telegram app's cache,
-  transcribed locally and kept for a few days; search them, copy or delete each text.
+  transcribed locally and kept for a few days or forever; search them, copy or delete each text,
+  also in the settings' history.
 
 ## Built for Apple Silicon
 

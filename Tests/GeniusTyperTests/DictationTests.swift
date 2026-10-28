@@ -247,6 +247,7 @@ final class TelegramVoicesTests: XCTestCase {
         ]
         XCTAssertEqual(VoiceText.kept(texts, days: 7, now: now).map(\.text), ["свежее", "по запросу"])
         XCTAssertEqual(VoiceText.kept(texts, days: 1, now: now).map(\.text), ["по запросу"])
+        XCTAssertEqual(VoiceText.kept(texts, days: 0, now: now), texts) // forever
         XCTAssertEqual(VoiceText.decode(try JSONEncoder().encode(texts)), texts)
 
         let old = Data(#"[{"key":"/media/telegram-cloud-document-1|1792000000.123456","text":"привет"}]"#.utf8)

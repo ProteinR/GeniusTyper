@@ -62,7 +62,7 @@ defaults write com.dmemruk.GeniusTyper autoOffApps -array-add com.sublimetext.4
 | `mascot` | string | `none` | Animation above the pill: `none`, `wigCat`, `bruce` (the removed `monkey` and `greyCat` read as `none`). |
 | `voicesEnabled` | bool | `true` | Telegram voice messages (inside dictation). |
 | `voicesShortcut` | data (JSON) | ⌃⌥V | Same format as `clipboardHotKey`. |
-| `voicesKeepDays` | int | `7` | Voice message texts are kept this many days (1 / 3 / 7 / 30). |
+| `voicesKeepDays` | int | `7` | Voice message texts are kept this many days (1 / 3 / 7 / 30; 0 = forever, new voice messages of the last 7 days are then transcribed on opening). |
 
 API keys are not in the defaults: they are in the login Keychain, service `com.dmemruk.GeniusTyper`,
 account = the engine (`groq`, `openAI`, `custom`).
@@ -76,7 +76,7 @@ account = the engine (`groq`, `openAI`, `custom`).
 
 ## Statistics window
 
-`statsKind`, `statsPeriod`, `statsShowWeek`: the last tab and period shown; nothing to set by hand.
+`statsKind`, `statsPeriod`, `statsShowWeek`, `historyKind`: the last tab and period shown; nothing to set by hand.
 
 ## Debugging
 

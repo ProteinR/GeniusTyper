@@ -10,6 +10,8 @@ struct DictationPage: View {
     @AppStorage("dictationYo") private var yo = true
     @AppStorage("voicesEnabled") private var voices = true
     @AppStorage("voicesKeepDays") private var keepDays = 7
+    /// The stored voice texts: how many and how much space, read on opening.
+    @State private var stored = (count: 0, bytes: Int64(0))
     @AppStorage("mascot") private var mascot = Mascot.none.rawValue
     @AppStorage("levelStyle") private var levelStyle = LevelStyle.bars.rawValue
 
@@ -89,7 +91,7 @@ struct DictationPage: View {
                     .active(voices)
                 LabeledContent {
                     Menu {
-                        ForEach([1, 3, 7, 30], id: \.self) { days in
+                        ForEach([1, 3, 7, 30, 0], id: \.self) { days in
                             Button(Self.daysTitle(days)) { keepDays = days }
                         }
                     } label: {
@@ -98,7 +100,11 @@ struct DictationPage: View {
                     .fixedSize()
                 } label: {
                     Text("Хранить расшифровки")
-                    Text("Показываются сразу; новые голосовые за это время расшифровываются при открытии")
+                    Text(keepDays == 0
+                         ? "Показываются сразу; новые голосовые за последние 7 дней расшифровываются при открытии"
+                         : "Показываются сразу; новые голосовые за это время расшифровываются при открытии")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Хранится расшифровок: \(stored.count) · \(ByteCountFormatter.string(fromByteCount: stored.bytes, countStyle: .file))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .active(voices)
@@ -111,11 +117,18 @@ struct DictationPage: View {
             .active(enabled)
         }
         .formStyle(.grouped)
+        .onAppear(perform: countStored)
+        .onChange(of: keepDays) { countStored() }
         .toggleStyle(LightSwitchStyle())
+    }
+
+    private func countStored() {
+        stored = (VoiceTranscripts.shared.storedCount, VoiceTranscripts.storedBytes)
     }
 
     static func daysTitle(_ days: Int) -> String {
         switch days {
+        case 0: return String(localized: "Всегда")
         case 1: return String(localized: "1 день")
         case 3: return String(localized: "3 дня")
         default: return String(localized: "\(days) дней")

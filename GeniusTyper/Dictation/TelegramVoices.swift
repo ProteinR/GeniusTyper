@@ -134,8 +134,9 @@ struct VoiceText: Codable, Equatable {
     }
 
     /// Kept for `days`: by the message's date, or by when it was transcribed (an older one asked
-    /// for with "more" stays as long).
+    /// for with "more" stays as long). 0 days = forever.
     static func kept(_ texts: [VoiceText], days: Int, now: Date = Date()) -> [VoiceText] {
+        guard days > 0 else { return texts }
         let since = now.addingTimeInterval(-TimeInterval(days) * 86_400)
         return texts.filter { max($0.date, $0.added) >= since }
     }
@@ -165,9 +166,9 @@ struct VoiceText: Codable, Equatable {
     }
 }
 
-/// The popup's model. Opening shows the stored texts of the last days (`Prefs.voicesKeepDays`) at
-/// once, newest first, and meanwhile looks in Telegram's cache for voice messages of those days not
-/// transcribed yet: they join the list in their place and are transcribed newest first. Older ones
+/// The popup's model. Opening shows the stored texts of the last days (`Prefs.voicesKeepDays`, or
+/// all) at once, newest first, and meanwhile looks in Telegram's cache for voice messages of those
+/// days (`Prefs.voicesScanDays`) not transcribed yet: they join the list in their place and are transcribed newest first. Older ones
 /// a page at a time on request. Texts are kept in `voice-texts.json` next to the history (also
 /// after the file leaves Telegram's cache); nothing goes into the dictation history or statistics.
 @MainActor
@@ -216,15 +217,10 @@ final class VoiceTranscripts: ObservableObject {
     func refresh() {
         clear()
         problem = nil
-        let now = Date(), days = Prefs.voicesKeepDays
-        let kept = VoiceText.kept(texts, days: days, now: now)
-        if kept.count != texts.count {
-            texts = kept
-            save()
-        }
-        items = texts.filter { $0.deleted != true }.sorted { $0.date > $1.date }.map { Item(file: $0.file, text: .done($0.text)) }
+        let now = Date()
+        items = storedTexts(now: now).map { Item(file: $0.file, text: .done($0.text)) }
         isChecking = true
-        let since = now.addingTimeInterval(-TimeInterval(days) * 86_400)
+        let since = now.addingTimeInterval(-TimeInterval(Prefs.voicesScanDays) * 86_400)
         let known = Set(texts.map(\.path)), notVoices = notVoices
         loader = Task {
             let found = await Task.detached(priority: .userInitiated) {
@@ -312,13 +308,37 @@ final class VoiceTranscripts: ObservableObject {
         }
     }
 
+    /// The stored texts of the days kept, newest first (the expired ones are dropped from the store
+    /// first): shown at once on opening, and the voices tab of the settings' history.
+    func storedTexts(now: Date = Date()) -> [VoiceText] {
+        let kept = VoiceText.kept(texts, days: Prefs.voicesKeepDays, now: now)
+        if kept.count != texts.count {
+            texts = kept
+            save()
+        }
+        return texts.filter { $0.deleted != true }.sorted { $0.date > $1.date }
+    }
+
+    /// How many texts the days kept hold (nothing is dropped: the setting may change back).
+    var storedCount: Int {
+        VoiceText.kept(texts, days: Prefs.voicesKeepDays).count { $0.deleted != true }
+    }
+
+    /// What the stored texts take on disk (one JSON file).
+    static var storedBytes: Int64 {
+        Int64((try? storeURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
+
+    func delete(_ item: Item) { forget(item.file) }
+    func delete(_ text: VoiceText) { forget(text.file) }
+
     /// Removes a voice message's text from the list and the store; the file is remembered as
     /// deleted, so it is not transcribed again while it is in Telegram's cache.
-    func delete(_ item: Item) {
-        items.removeAll { $0.id == item.id }
-        let path = item.file.url.path
+    private func forget(_ file: VoiceFile) {
+        let path = file.url.path
+        items.removeAll { $0.id == path }
         texts.removeAll { $0.path == path }
-        texts.append(VoiceText(path: path, date: item.file.date, duration: item.file.duration, text: "", added: Date(), deleted: true))
+        texts.append(VoiceText(path: path, date: file.date, duration: file.duration, text: "", added: Date(), deleted: true))
         save()
     }
 

@@ -233,6 +233,10 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   two views, one picked at random per dictation — front (crop 854:467:0:13; slow 1.0–4.0 s, fast
   4.3–6.3 s) and side (crop 690:460:110:20; slow 6.7–8.9 s, fast 11.55–13.9 s). Each starts slow
   and switches to the fast loop after 3 s of speech; a pause over 1.5 s starts slow again.
+- **История** in the settings (`HistoryPage`) has two tabs (`Segments`, `historyKind`, asked
+  2026-10-28): "Диктовки" and "Голосовые из Telegram" (the stored texts, `storedTexts()`: search,
+  copy, delete, click unfolds; at the bottom the count, the size of `voice-texts.json` and how long
+  they are kept).
 - **History** (`History`, SQLite `~/Library/Application Support/GeniusTyper/dictation/history.sqlite`): text
   only (no audio), forever: date, text, words, duration, app, model. Paged from disk, Cyrillic
   case-insensitive search (`lower_ru`), copy, delete. The left-click panel's column: a click on a
@@ -253,9 +257,11 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   read once per opening and paged). **Stored texts first** (asked 2026-10-26): opening shows at
   once the texts kept in `~/Library/Application Support/GeniusTyper/dictation/voice-texts.json`
   (`VoiceText`: path, file date, duration, text, when transcribed) for the last
-  `Prefs.voicesKeepDays` (Диктовка → "Хранить расшифровки": 1/3/7/30 days, default 7; kept by the
-  message date or by when it was transcribed), newest first, also after the file left Telegram's
-  cache; meanwhile `TelegramVoices.scan` looks for voice messages of those days not stored yet
+  `Prefs.voicesKeepDays` (Диктовка → "Хранить расшифровки": 1/3/7/30 days or "Всегда" = 0, default
+  7; kept by the message date or by when it was transcribed; under it how many are stored and the
+  size of the file), newest first, also after the file left Telegram's
+  cache; meanwhile `TelegramVoices.scan` looks for voice messages of those days
+  (`Prefs.voicesScanDays`: the last 7 when kept forever, not the whole cache) not stored yet
   (non-voice files are remembered for the run, so their headers are read once), they join the list
   in their place and are transcribed newest first. A quiet status under the list: "Проверяю новые
   голосовые…" → "Расшифровываю: N" → "Все голосовые расшифрованы". Older ones on request, 3 at a

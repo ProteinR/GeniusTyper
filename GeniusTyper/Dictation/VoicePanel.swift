@@ -184,7 +184,8 @@ struct VoicesView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
+                // Lazy: texts kept forever can be many.
+                LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(shown) { item in
                         VoiceRow(item: item, close: close)
                             .id(item.id)
