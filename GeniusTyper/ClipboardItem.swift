@@ -96,7 +96,11 @@ enum ClipboardRules {
     /// in the wrong layout ("ghbdtn") also finds "привет": `alternative` is the query retyped in
     /// the other layout.
     static func matches(_ item: ClipboardItem, query: String, alternative: String?) -> Bool {
-        let haystack = item.kind == .image ? item.title : (item.text ?? "")
+        matches(item.kind == .image ? item.title : (item.text ?? ""), query: query, alternative: alternative)
+    }
+
+    /// The same for any text (the Telegram voices' search).
+    static func matches(_ haystack: String, query: String, alternative: String?) -> Bool {
         func all(_ query: String) -> Bool {
             let words = query.split(whereSeparator: \.isWhitespace)
             return !words.isEmpty && words.allSatisfy { haystack.range(of: $0, options: [.caseInsensitive, .diacriticInsensitive]) != nil }

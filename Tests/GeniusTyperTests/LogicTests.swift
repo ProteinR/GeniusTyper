@@ -533,6 +533,13 @@ final class ClipboardTests: XCTestCase {
         XCTAssertTrue(ClipboardRules.matches(entry, query: "ghbdtn", alternative: alternative))
     }
 
+    func testTextSearchIgnoresYo() {
+        // The Telegram voices' search: dictated text has ё, a query is typed with е.
+        XCTAssertTrue(ClipboardRules.matches("Ещё увидимся завтра", query: "еще завтра", alternative: nil))
+        XCTAssertFalse(ClipboardRules.matches("Ещё увидимся", query: "сегодня", alternative: nil))
+        XCTAssertFalse(ClipboardRules.matches("Ещё увидимся", query: "  ", alternative: nil))
+    }
+
     func testTitles() {
         XCTAssertEqual(item("  first\nsecond  ").title, "first ⏎ second")
         XCTAssertEqual(item("/a/b.txt\n/c/d.png", kind: .files).title, "b.txt и ещё 1")

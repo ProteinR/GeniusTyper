@@ -26,7 +26,10 @@ used, and the app registers itself as a login item.
 - **Left click** (`QuickPanel.swift`): a short menu-like panel under the icon, built on show and
   released on close. Rows only for parts that are on: "Голосовые из Telegram ›" (its column is
   open at once when the voices are on, so they start transcribing), "История диктовок ›" (column
-  on hover, 0.3 s, like a submenu), "История буфера" (opens the history window); then
+  on hover, 0.3 s, like a submenu), "История буфера" (opens the history window). Both columns
+  have one fixed size (`SideColumn`, 400 × 436 pt, the history's), so switching between them or
+  voice texts arriving never resize the panel (it jumped, 2026-10-28), and each has a search
+  field on top; then
   **"Исправлять текст"** (= not paused: one switch instead of Genius Switcher's separate "Пауза",
   which confused the owner next to "Автоисправление") and under it "в «app in front»"
   (`autoOffApps`); "Клавиши не видны: защищённый ввод" while macOS Secure Input is on
@@ -251,9 +254,11 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   message date or by when it was transcribed), newest first, also after the file left Telegram's
   cache; meanwhile `TelegramVoices.scan` looks for voice messages of those days not stored yet
   (non-voice files are remembered for the run, so their headers are read once), they join the list
-  in their place and are transcribed newest first. A quiet status beside the title: "Проверяю новые
+  in their place and are transcribed newest first. A quiet status under the list: "Проверяю новые
   голосовые…" → "Расшифровываю: N" → "Все голосовые расшифрованы". Older ones on request, 3 at a
-  time, as above. One stored text per file **path** (the id of the document is in the name):
+  time, as above. **Search** (asked 2026-10-28): the field on top filters the texts in the
+  list (every word of the query, case-insensitive, е finds ё, a query in the wrong layout too:
+  `ClipboardRules.matches`, as in the clipboard history); "more" is off while searching. One stored text per file **path** (the id of the document is in the name):
   Telegram sometimes touches a file again, and keying by path + date transcribed it twice
   (2026-10-27; duplicates are merged on load, `VoiceText.unique`). The bin beside the copy button
   deletes a text (not while it is transcribed); the file stays remembered as `deleted` without

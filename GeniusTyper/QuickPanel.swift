@@ -1,5 +1,4 @@
 import AppKit
-import Combine
 import SwiftUI
 
 /// What the menu bar icon's left click opens: a short menu-like panel under the icon. Only what is
@@ -16,7 +15,6 @@ final class QuickPanel {
     private var panel: Panel?
     private var host: NSHostingView<QuickMenuView>?
     private var monitors: [Any] = []
-    private var changes: AnyCancellable?
     private weak var button: NSStatusBarButton?
     /// The icon on the screen; nil when it is hidden (the panel then opens at the top right).
     private var anchor: NSRect?
@@ -39,7 +37,6 @@ final class QuickPanel {
     func close() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
-        changes = nil
         panel?.orderOut(nil)
         panel = nil
         host = nil
@@ -77,10 +74,6 @@ final class QuickPanel {
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         self.panel = panel
         self.host = host
-        // Voice texts arrive after opening: grow with them.
-        changes = VoiceTranscripts.shared.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.fit(initial: false) } }
-        }
     }
 
     /// Hangs from the icon: the top edge stays under the menu bar and the right edge at the icon's
@@ -129,6 +122,15 @@ final class QuickPanel {
 
 private enum Side: String { case voices, history }
 
+/// The size of both side columns (voices and history) and of their lists, so switching between
+/// them or new voice texts arriving never resize the panel (it jumped, 2026-10-28).
+/// The whole column has a fixed size and its list takes what is left (the footers differ: a link
+/// under the history, a status line under the voices).
+enum SideColumn {
+    static let width: CGFloat = 400
+    static let height: CGFloat = 436
+}
+
 private struct QuickMenuView: View {
     let initialSide: Side?
     let close: () -> Void
@@ -145,7 +147,7 @@ private struct QuickMenuView: View {
         HStack(alignment: .top, spacing: 0) {
             switch side {
             case .voices:
-                VoicesView(close: close, resized: resized)
+                VoicesView(close: close)
                 Divider()
             case .history:
                 HistorySide(close: close)
@@ -328,24 +330,26 @@ private struct HistorySide: View {
             TextField("Поиск по истории", text: $search)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
-            if items.isEmpty {
-                Text(search.isEmpty ? "История пуста" : "Ничего не найдено")
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 6)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(items) { entry in
-                            HistoryRow(entry: entry) {
-                                copy(entry.text)
-                                close()
+            Group {
+                if items.isEmpty {
+                    Text(search.isEmpty ? "История пуста" : "Ничего не найдено")
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(items) { entry in
+                                HistoryRow(entry: entry) {
+                                    copy(entry.text)
+                                    close()
+                                }
                             }
                         }
+                        .padding(.trailing, 14) // room for the scroll bar
                     }
-                    .padding(.trailing, 14) // room for the scroll bar
                 }
-                .frame(height: 360)
             }
+            .frame(maxHeight: .infinity, alignment: .topLeading)
             Button("Вся история…") {
                 close()
                 SettingsWindow.shared.show(page: .history)
@@ -354,7 +358,7 @@ private struct HistorySide: View {
             .font(.caption)
         }
         .padding(10)
-        .frame(width: 400)
+        .frame(width: SideColumn.width, height: SideColumn.height)
         .onAppear {
             load()
             focused = true

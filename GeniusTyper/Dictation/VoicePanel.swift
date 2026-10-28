@@ -1,13 +1,13 @@
 import AppKit
-import Combine
 import SwiftUI
 
 /// The "Голосовые из Telegram" popup: the latest voice messages and their text, in a small panel
 /// near the top centre of the screen with the pointer. Built on show and released on close; Esc,
 /// a click elsewhere or the hot key again closes it. Does not take the focus from Telegram. The
-/// stored texts of the last days show at once; a quiet status beside the title tells while new
+/// stored texts of the last days show at once; a quiet status under the list tells while new
 /// voice messages are looked for and transcribed. Scrolling on past the end, ↓ at the end or the
-/// "Ещё" button adds the next few older ones.
+/// "Ещё" button adds the next few older ones. Same size as the left-click panel's column
+/// (`SideColumn`), which never changes while texts arrive.
 @MainActor
 final class VoicePanel {
     static let shared = VoicePanel()
@@ -15,7 +15,6 @@ final class VoicePanel {
     private var panel: Panel?
     private var host: NSHostingView<VoicesView>?
     private var monitors: [Any] = []
-    private var changes: AnyCancellable?
 
     var isShown: Bool { panel != nil }
 
@@ -26,7 +25,7 @@ final class VoicePanel {
     func show() {
         if panel == nil { build() }
         VoiceTranscripts.shared.refresh()
-        fit(anchorTop: false)
+        place()
         panel?.makeKeyAndOrderFront(nil)
         watchForClose()
     }
@@ -34,7 +33,6 @@ final class VoicePanel {
     func close() {
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
-        changes = nil
         panel?.orderOut(nil)
         panel = nil
         host = nil
@@ -43,9 +41,7 @@ final class VoicePanel {
     }
 
     private func build() {
-        let host = NSHostingView(rootView: VoicesView(
-            close: { [weak self] in self?.close() },
-            resized: { [weak self] in self?.fit(anchorTop: true) }))
+        let host = NSHostingView(rootView: VoicesView(close: { [weak self] in self?.close() }, titled: true))
         let size = host.fittingSize
         let panel = Panel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel],
                           backing: .buffered, defer: false)
@@ -70,22 +66,12 @@ final class VoicePanel {
         panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         self.panel = panel
         self.host = host
-        // The text arrives after opening: grow with it, keeping the top edge in place.
-        changes = VoiceTranscripts.shared.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.fit(anchorTop: true) } }
-        }
     }
 
-    private func fit(anchorTop: Bool) {
+    private func place() {
         guard let panel, let host else { return }
         host.layoutSubtreeIfNeeded()
         let size = host.fittingSize
-        if anchorTop {
-            guard size != panel.frame.size else { return }
-            let top = panel.frame.maxY
-            panel.setFrame(NSRect(x: panel.frame.minX, y: top - size.height, width: size.width, height: size.height), display: true)
-            return
-        }
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? .zero
@@ -113,44 +99,76 @@ final class VoicePanel {
     }
 }
 
+/// The voices with a search over their texts, laid out like the history column: search field, a
+/// list filling the column's fixed size, one line under it. The popup adds a title row with a
+/// close button.
 struct VoicesView: View {
     let close: () -> Void
-    let resized: () -> Void
+    var titled = false
     @ObservedObject private var model = VoiceTranscripts.shared
-    @State private var listHeight: CGFloat = 0
     @State private var more = MoreTrigger()
-
-    /// Taller than this, the list scrolls.
-    private let maxListHeight: CGFloat = 520
+    @State private var search = ""
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
+            if titled {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform").foregroundStyle(.secondary)
+                    Text("Голосовые из Telegram").font(.headline)
+                    Spacer()
+                    Button(action: close) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                        .buttonStyle(.plain)
+                        .help("Закрыть (Esc)")
+                }
+            }
+            TextField("Поиск по голосовым", text: $search)
+                .textFieldStyle(.roundedBorder)
+                .focused($focused)
+            VStack(alignment: .leading, spacing: 8) {
+                if let problem = model.problem {
+                    Text(problem).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                if !shown.isEmpty {
+                    list
+                } else if !query.isEmpty {
+                    Text("Ничего не найдено").foregroundStyle(.secondary).padding(.vertical, 6)
+                } else if model.problem == nil && !model.isChecking {
+                    Text("Голосовых пока нет").foregroundStyle(.secondary).padding(.vertical, 6)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .topLeading)
             HStack(spacing: 8) {
-                Image(systemName: "waveform").foregroundStyle(.secondary)
-                Text("Голосовые из Telegram").font(.headline)
-                Spacer()
                 status
-                Button(action: close) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
-                    .buttonStyle(.plain)
-                    .help("Закрыть (Esc)")
+                Spacer()
+                Text(HotkeyMonitor.shared.voicesShortcut.title).foregroundStyle(.tertiary)
             }
-            if let problem = model.problem {
-                Text(problem).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            if !model.items.isEmpty { list }
-            Text(model.hasMore
-                 ? "Новое сверху · ещё — прокрутите вниз или ↓ · \(HotkeyMonitor.shared.voicesShortcut.title)"
-                 : "Новое сверху · \(HotkeyMonitor.shared.voicesShortcut.title)")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            .font(.caption)
         }
-        .padding(14)
-        .frame(width: 460)
-        .onAppear(perform: more.start)
+        .padding(10)
+        .frame(width: SideColumn.width, height: SideColumn.height)
+        .onAppear {
+            more.start()
+            focused = true
+        }
         .onDisappear(perform: more.stop)
+        .onChange(of: search) { more.searching = !query.isEmpty }
     }
 
-    /// Quiet, beside the title: the stored texts are already shown while the cache is checked.
+    private var query: String { search.trimmingCharacters(in: .whitespaces) }
+
+    /// While searching: only the texts with every word of the query (also typed in the wrong
+    /// layout, ё as е), as in the clipboard history; "more" is off.
+    private var shown: [VoiceTranscripts.Item] {
+        guard !query.isEmpty else { return model.items }
+        let alternative = ClipboardRules.retyped(query, renderer: Observer.shared.layouts)
+        return model.items.filter { item in
+            guard case .done(let text) = item.text else { return false }
+            return ClipboardRules.matches(text, query: query, alternative: alternative)
+        }
+    }
+
+    /// Quiet, under the list: the stored texts are already shown while the cache is checked.
     @ViewBuilder private var status: some View {
         let pending = model.pending
         HStack(spacing: 5) {
@@ -165,7 +183,6 @@ struct VoicesView: View {
                 Text("Все голосовые расшифрованы")
             }
         }
-        .font(.caption)
         .foregroundStyle(.secondary)
     }
 
@@ -173,12 +190,12 @@ struct VoicesView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(model.items.enumerated()), id: \.element.id) { index, item in
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
                         if index > 0 { Divider() }
                         VoiceRow(item: item)
                             .id(item.id)
                     }
-                    if model.hasMore || model.isLoading {
+                    if query.isEmpty && (model.hasMore || model.isLoading) {
                         Button { model.loadMore() } label: {
                             HStack(spacing: 6) {
                                 if model.isLoading {
@@ -194,17 +211,13 @@ struct VoicesView: View {
                         }
                         .buttonStyle(.borderless)
                         .disabled(model.isLoading)
+                        .help("Или прокрутите вниз, или ↓")
                     }
                 }
                 // Room for the scroll bar, which is drawn over the content (the copy buttons).
                 .padding(.trailing, 14)
             }
             .scrollIndicators(.automatic)
-            .frame(height: min(listHeight, maxListHeight))
-            .onScrollGeometryChange(for: CGFloat.self, of: \.contentSize.height) { _, height in
-                listHeight = height
-                DispatchQueue.main.async(execute: resized)
-            }
             .onScrollGeometryChange(for: Bool.self, of: { geometry in
                 geometry.contentOffset.y + geometry.containerSize.height >= geometry.contentSize.height - 8
             }, action: { _, end in more.atEnd = end })
@@ -222,13 +235,14 @@ struct VoicesView: View {
 @MainActor
 private final class MoreTrigger {
     var atEnd = true
+    var searching = false
     private var monitor: Any?
 
     func start() {
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown]) { [weak self] event in
             MainActor.assumeIsolated {
-                guard self?.atEnd == true else { return event }
+                guard self?.atEnd == true, self?.searching == false else { return event }
                 if event.type == .scrollWheel, event.scrollingDeltaY < 0, event.momentumPhase.isEmpty {
                     VoiceTranscripts.shared.loadMore()
                 } else if event.type == .keyDown, event.keyCode == 125 { // ↓
