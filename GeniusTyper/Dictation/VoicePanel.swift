@@ -138,12 +138,7 @@ struct VoicesView: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: .topLeading)
-            HStack(spacing: 8) {
-                status
-                Spacer()
-                Text(HotkeyMonitor.shared.voicesShortcut.title).foregroundStyle(.tertiary)
-            }
-            .font(.caption)
+            SideFooter(shortcut: HotkeyMonitor.shared.voicesShortcut.title) { status }
         }
         .padding(10)
         .frame(width: SideColumn.width, height: SideColumn.height)
@@ -189,10 +184,9 @@ struct VoicesView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
-                        if index > 0 { Divider() }
-                        VoiceRow(item: item)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(shown) { item in
+                        VoiceRow(item: item, close: close)
                             .id(item.id)
                     }
                     if query.isEmpty && (model.hasMore || model.isLoading) {
@@ -261,26 +255,14 @@ private final class MoreTrigger {
 }
 
 /// One voice message with its whole text (folding to two lines and unfolding on click left the
-/// unfolded text drawn over the rows below).
+/// unfolded text drawn over the rows below), in the same row as a dictation in the history.
 private struct VoiceRow: View {
     let item: VoiceTranscripts.Item
+    let close: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text(meta).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                if case .done(let text) = item.text, !text.isEmpty {
-                    Button { copy(text) } label: { Image(systemName: "doc.on.doc") }
-                        .buttonStyle(.borderless)
-                        .help("Скопировать")
-                }
-                if deletable {
-                    Button { VoiceTranscripts.shared.delete(item) } label: { Image(systemName: "trash") }
-                        .buttonStyle(.borderless)
-                        .help("Удалить расшифровку")
-                }
-            }
+        SideRow(meta: meta, text: text, delete: deletable ? { VoiceTranscripts.shared.delete(item) } : nil,
+                action: text.map { text in { copyText(text); close() } }) {
             switch item.text {
             case .waiting:
                 Text("В очереди…").foregroundStyle(.secondary)
@@ -291,13 +273,17 @@ private struct VoiceRow: View {
                 }
             case .done(let text):
                 Text(text.isEmpty ? String(localized: "Речь не распознана") : text)
-                    .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             case .failed(let message):
                 Text(message).foregroundStyle(.red)
             }
         }
+    }
+
+    /// The text to copy, once there is one.
+    private var text: String? {
+        if case .done(let text) = item.text, !text.isEmpty { return text }
+        return nil
     }
 
     /// Not while it waits or is transcribed: the result would bring it back.
@@ -314,11 +300,5 @@ private struct VoiceRow: View {
         // Texts stored before 0.13.0 have no duration.
         guard seconds > 0 else { return time }
         return "\(time) · \(seconds / 60):\(String(format: "%02d", seconds % 60))"
-    }
-
-    private func copy(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        Sounds.play(.success)
     }
 }

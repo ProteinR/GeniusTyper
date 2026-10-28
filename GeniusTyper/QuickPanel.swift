@@ -316,7 +316,8 @@ private struct SwitchRow: View {
     }
 }
 
-/// The history column: search as you type, newest first; a click copies.
+/// The history column: search as you type, newest first; a click copies. Laid out exactly like
+/// the voices column (`VoicesView`): search field, list of `SideRow`s, a footer line.
 private struct HistorySide: View {
     let close: () -> Void
     @State private var search = ""
@@ -339,9 +340,14 @@ private struct HistorySide: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 2) {
                             ForEach(items) { entry in
-                                HistoryRow(entry: entry) {
-                                    copy(entry.text)
+                                SideRow(meta: meta(entry), text: entry.text, delete: {
+                                    History.shared.delete(id: entry.id)
+                                    load()
+                                }, action: {
+                                    copyText(entry.text)
                                     close()
+                                }) {
+                                    Text(entry.text).lineLimit(3)
                                 }
                             }
                         }
@@ -350,12 +356,13 @@ private struct HistorySide: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: .topLeading)
-            Button("Вся история…") {
-                close()
-                SettingsWindow.shared.show(page: .history)
+            SideFooter(shortcut: HotkeyMonitor.shared.shortcut.title) {
+                Button("Вся история…") {
+                    close()
+                    SettingsWindow.shared.show(page: .history)
+                }
+                .buttonStyle(.link)
             }
-            .buttonStyle(.link)
-            .font(.caption)
         }
         .padding(10)
         .frame(width: SideColumn.width, height: SideColumn.height)
@@ -369,48 +376,79 @@ private struct HistorySide: View {
     private func load() {
         items = History.shared.page(search: search.trimmingCharacters(in: .whitespaces), offset: 0, limit: Self.limit)
     }
-}
 
-private struct HistoryRow: View {
-    let entry: HistoryEntry
-    let action: () -> Void
-    @State private var hovered = false
-    @State private var copied = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(meta).font(.caption).foregroundStyle(.secondary)
-                Text(entry.text).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
-            }
-            // Copies and stays open (a click on the row copies and closes the panel).
-            Button {
-                copy(entry.text)
-                copied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
-            } label: {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-            }
-            .buttonStyle(.borderless)
-            .help("Скопировать")
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 6).fill(hovered ? Color.primary.opacity(0.1) : .clear))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: action)
-        .onHover { hovered = $0 }
-        .help("Нажмите, чтобы скопировать")
-    }
-
-    private var meta: String {
+    private func meta(_ entry: HistoryEntry) -> String {
         let date = entry.date.formatted(.relative(presentation: .named))
         return entry.appName.isEmpty ? date : "\(date) · \(entry.appName)"
     }
 }
 
+/// One row of a side column, the same for dictations and voice messages: the date line with the
+/// copy and delete buttons, the text under it. Highlighted under the pointer when a click does
+/// something (copies and closes the panel); the copy button copies and stays.
+struct SideRow<Content: View>: View {
+    let meta: String
+    /// Nil while there is nothing to copy (a voice message still transcribed).
+    let text: String?
+    /// Nil while it cannot be deleted.
+    let delete: (() -> Void)?
+    let action: (() -> Void)?
+    @ViewBuilder let content: Content
+    @State private var hovered = false
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text(meta).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                if let text {
+                    Button {
+                        copyText(text)
+                        copied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+                    } label: {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Скопировать")
+                }
+                if let delete {
+                    Button(action: delete) { Image(systemName: "trash") }
+                        .buttonStyle(.borderless)
+                        .help("Удалить")
+                }
+            }
+            content.frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 6).fill(hovered && action != nil ? Color.primary.opacity(0.1) : .clear))
+        .contentShape(Rectangle())
+        .onTapGesture { action?() }
+        .onHover { hovered = $0 }
+        .help(action == nil ? "" : String(localized: "Нажмите, чтобы скопировать"))
+    }
+}
+
+/// The line under a side column's list: something on the left, the column's shortcut on the right.
+struct SideFooter<Leading: View>: View {
+    let shortcut: String
+    @ViewBuilder let leading: Leading
+
+    var body: some View {
+        HStack(spacing: 8) {
+            leading
+            Spacer()
+            Text(shortcut).foregroundStyle(.tertiary)
+        }
+        .font(.caption)
+        .frame(height: 16)
+    }
+}
+
 @MainActor
-private func copy(_ text: String) {
+func copyText(_ text: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
     Sounds.play(.success)

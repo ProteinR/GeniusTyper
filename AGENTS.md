@@ -28,8 +28,10 @@ used, and the app registers itself as a login item.
   open at once when the voices are on, so they start transcribing), "История диктовок ›" (column
   on hover, 0.3 s, like a submenu), "История буфера" (opens the history window). Both columns
   have one fixed size (`SideColumn`, 400 × 436 pt, the history's), so switching between them or
-  voice texts arriving never resize the panel (it jumped, 2026-10-28), and each has a search
-  field on top; then
+  voice texts arriving never resize the panel (it jumped, 2026-10-28), and they look the same
+  (asked 2026-10-28: the margins differed): search field, rows of `SideRow` (date line with copy
+  and delete, the text under it; a click copies and closes the panel), `SideFooter` (left: "Вся
+  история…" or the voices' status; right: the shortcut); then
   **"Исправлять текст"** (= not paused: one switch instead of Genius Switcher's separate "Пауза",
   which confused the owner next to "Автоисправление") and under it "в «app in front»"
   (`autoOffApps`); "Клавиши не видны: защищённый ввод" while macOS Secure Input is on
@@ -234,7 +236,8 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
 - **History** (`History`, SQLite `~/Library/Application Support/GeniusTyper/dictation/history.sqlite`): text
   only (no audio), forever: date, text, words, duration, app, model. Paged from disk, Cyrillic
   case-insensitive search (`lower_ru`), copy, delete. The left-click panel's column: a click on a
-  row copies and closes the panel, the copy button beside it copies and stays (2026-10-27).
+  row copies and closes the panel, the copy button beside it copies and stays (2026-10-27), the
+  bin deletes it (2026-10-28). The voices' rows do the same (their text is no longer selectable).
 - **Statistics**: week / month / all time: words, dictations, words per minute, time saved (typing
   at 45 wpm minus speaking time — TypeWhisper's figure), words per day, by app, by model; all
   totals computed by SQLite.
