@@ -133,6 +133,18 @@ final class HistoryTests: XCTestCase {
         XCTAssertEqual(history.page(offset: 0, limit: 10).count, 1)
     }
 
+    func testCountAndPrune() {
+        let now = Date()
+        history.add(text: "старая", duration: 1, appBundle: "a", appName: "A", model: "m", date: now.addingTimeInterval(-40 * 86_400))
+        history.add(text: "новая", duration: 1, appBundle: "a", appName: "A", model: "m", date: now.addingTimeInterval(-86_400))
+        XCTAssertEqual(history.count(), 2)
+        history.prune(keepDays: 0, now: now)  // forever
+        XCTAssertEqual(history.count(), 2)
+        history.prune(keepDays: 30, now: now)
+        XCTAssertEqual(history.page(offset: 0, limit: 10).map(\.text), ["новая"])
+        XCTAssertGreaterThan(history.bytes, 0)
+    }
+
     func testStats() {
         let now = Date()
         history.add(text: "раз два три", duration: 6, appBundle: "a", appName: "Telegram", model: "Parakeet v3", date: now)

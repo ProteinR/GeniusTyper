@@ -109,6 +109,35 @@ final class History {
         return result
     }
 
+    /// How many dictations there are.
+    func count() -> Int {
+        var result = 0
+        withDB { db in
+            let statement = prepare(db, "SELECT COUNT(*) FROM dictations")
+            defer { sqlite3_finalize(statement) }
+            if sqlite3_step(statement) == SQLITE_ROW { result = Int(sqlite3_column_int64(statement, 0)) }
+        }
+        return result
+    }
+
+    /// What the history takes on disk (one SQLite file).
+    var bytes: Int64 {
+        Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
+
+    /// Deletes the dictations older than `days` days (0 = keeps all), then gives the space back.
+    func prune(keepDays days: Int, now: Date = Date()) {
+        guard days > 0 else { return }
+        let cutoff = now.addingTimeInterval(-Double(days) * 86_400).timeIntervalSince1970
+        withDB { db in
+            let statement = prepare(db, "DELETE FROM dictations WHERE date < ?")
+            sqlite3_bind_double(statement, 1, cutoff)
+            sqlite3_step(statement)
+            sqlite3_finalize(statement)
+            if sqlite3_changes(db) > 0 { exec(db, "VACUUM") }
+        }
+    }
+
     func delete(id: Int64) {
         withDB { db in
             let statement = prepare(db, "DELETE FROM dictations WHERE id = ?")

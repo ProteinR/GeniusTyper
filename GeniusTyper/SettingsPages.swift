@@ -271,15 +271,15 @@ private struct HotKeyRecorder: View {
     }
 }
 
-/// "1,5 МБ, 70 записей · Очистить…": the only part of the page that changes with every copy.
+/// "Записей: 70 · 1,5 МБ · Очистить…" (as under the history's list): the only part of the page that changes with every copy.
 private struct ClipboardUsageRow: View {
     @ObservedObject var usage: ClipboardUsage
     let clear: () -> Void
 
     var body: some View {
-        LabeledContent("Занято") {
+        LabeledContent("Хранится") {
             HStack(spacing: 8) {
-                Text("\(ByteCountFormatter.string(fromByteCount: Int64(usage.value.bytes), countStyle: .file)), \(usage.value.count) зап.")
+                Text("Записей: \(usage.value.count) · \(ByteCountFormatter.string(fromByteCount: Int64(usage.value.bytes), countStyle: .file))")
                     .foregroundStyle(.secondary)
                 Button("Очистить…", action: clear)
                     .disabled(usage.value.count == 0)

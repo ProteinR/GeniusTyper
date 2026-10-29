@@ -30,7 +30,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
 /// The settings window: everything that is not used daily (the left-click panel has that). Pages
 /// in a sidebar; the three parts of the app (Раскладка, Буфер обмена, Диктовка) each start with
-/// their own switch, and the sidebar shows which are on. Made on open and dropped on close, so it
+/// their own switch (the sidebar had green dots for the parts that are on; the owner found them
+/// unclear, 2026-10-29). Made on open and dropped on close, so it
 /// costs no memory while hidden (lessons from MXCtl: no `TabView`, no system switches,
 /// `sizingOptions` off).
 @MainActor
@@ -70,6 +71,12 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window?.orderFrontRegardless()
     }
 
+    /// История on one of its tabs ("Вся история…" under the panel's columns).
+    func show(history kind: HistoryPage.Kind) {
+        UserDefaults.standard.set(kind.rawValue, forKey: "historyKind")
+        show(page: .history)
+    }
+
     private static let frameName = "Settings"
 
     /// Lays out and draws the window at once (for timing how long a page takes to open).
@@ -93,9 +100,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 
 struct SettingsView: View {
     @ObservedObject var navigation: SettingsWindow.Navigation
-    @ObservedObject private var observer = Observer.shared
-    @ObservedObject private var clipboard = ClipboardStore.shared
-    @AppStorage("dictationEnabled") private var dictation = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -107,13 +111,6 @@ struct SettingsView: View {
                         HStack(spacing: 8) {
                             Image(systemName: page.symbol).frame(width: 20)
                             Text(page.title)
-                            Spacer(minLength: 4)
-                            if let on = isOn(page) {
-                                Circle()
-                                    .fill(on ? Color.green : Color.primary.opacity(0.2))
-                                    .frame(width: 6, height: 6)
-                                    .help(on ? "Включено" : "Выключено")
-                            }
                         }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 8)
@@ -150,15 +147,6 @@ struct SettingsView: View {
         }
     }
 
-    /// The dot beside the three parts with their own switch.
-    private func isOn(_ page: SettingsPage) -> Bool? {
-        switch page {
-        case .typing: return !observer.paused
-        case .clipboard: return clipboard.enabled
-        case .dictation: return dictation
-        default: return nil
-        }
-    }
 }
 
 /// The switch at the top of a part of the app, with what it does and what turning it off means.

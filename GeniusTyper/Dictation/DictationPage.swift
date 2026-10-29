@@ -11,8 +11,12 @@ struct DictationPage: View {
     @AppStorage("voicesEnabled") private var voices = true
     @AppStorage("voicesKeepDays") private var keepDays = 7
     @AppStorage("voicesSenders") private var senders = true
-    /// The stored voice texts: how many and how much space, read on opening.
+    @AppStorage("dictationKeepDays") private var dictationKeepDays = 0
+    /// The stored voice texts and the dictations: how many and how much space, read on opening.
     @State private var stored = (count: 0, bytes: Int64(0))
+    @State private var dictations = (count: 0, bytes: Int64(0))
+    /// A shorter period chosen for the dictations: asked first, the older ones are deleted for good.
+    @State private var shorterKeep: Int?
     @AppStorage("mascot") private var mascot = Mascot.none.rawValue
     @AppStorage("levelStyle") private var levelStyle = LevelStyle.bars.rawValue
 
@@ -78,6 +82,30 @@ struct DictationPage: View {
                 }
             }
             .active(enabled)
+            Section("История") {
+                LabeledContent {
+                    Menu {
+                        ForEach([30, 90, 365, 0], id: \.self) { days in
+                            Button(Self.daysTitle(days)) {
+                                if days != 0 && (dictationKeepDays == 0 || days < dictationKeepDays) {
+                                    shorterKeep = days
+                                } else {
+                                    dictationKeepDays = days
+                                }
+                            }
+                        }
+                    } label: {
+                        Text(Self.daysTitle(dictationKeepDays))
+                    }
+                    .fixedSize()
+                } label: {
+                    Text("Хранить диктовки")
+                    Text("Только текст, без звука. Статистика считается по истории: старые диктовки уходят и из неё")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Диктовок: \(dictations.count) · \(ByteCountFormatter.string(fromByteCount: dictations.bytes, countStyle: .file))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             ModelSections()
                 .active(enabled)
             Section {
@@ -113,7 +141,7 @@ struct DictationPage: View {
                          ? "Показываются сразу; новые голосовые за последние 7 дней расшифровываются при открытии"
                          : "Показываются сразу; новые голосовые за это время расшифровываются при открытии")
                         .font(.caption).foregroundStyle(.secondary)
-                    Text("Хранится расшифровок: \(stored.count) · \(ByteCountFormatter.string(fromByteCount: stored.bytes, countStyle: .file))")
+                    Text("Расшифровок: \(stored.count) · \(ByteCountFormatter.string(fromByteCount: stored.bytes, countStyle: .file))")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 .active(voices)
@@ -128,11 +156,25 @@ struct DictationPage: View {
         .formStyle(.grouped)
         .onAppear(perform: countStored)
         .onChange(of: keepDays) { countStored() }
+        .onChange(of: dictationKeepDays) {
+            History.shared.prune(keepDays: dictationKeepDays)
+            countStored()
+        }
         .toggleStyle(LightSwitchStyle())
+        .alert("Хранить диктовки \(Self.daysTitle(shorterKeep ?? 0))?",
+               isPresented: Binding(get: { shorterKeep != nil }, set: { if !$0 { shorterKeep = nil } })) {
+            Button("Удалить", role: .destructive) {
+                if let shorterKeep { dictationKeepDays = shorterKeep }
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Более старые удалятся без возврата, вместе со статистикой за то время.")
+        }
     }
 
     private func countStored() {
         stored = (VoiceTranscripts.shared.storedCount, VoiceTranscripts.storedBytes)
+        dictations = (History.shared.count(), History.shared.bytes)
     }
 
     static func daysTitle(_ days: Int) -> String {
@@ -140,6 +182,7 @@ struct DictationPage: View {
         case 0: return String(localized: "Всегда")
         case 1: return String(localized: "1 день")
         case 3: return String(localized: "3 дня")
+        case 365: return String(localized: "1 год")
         default: return String(localized: "\(days) дней")
         }
     }

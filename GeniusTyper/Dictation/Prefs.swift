@@ -9,6 +9,7 @@ enum Prefs {
             "dictationEnabled": false,
             "voicesEnabled": true,
             "voicesKeepDays": 7,
+            "dictationKeepDays": 0,
             "voicesSenders": true,
             "dictationYo": true,
             "dictationSounds": true,
@@ -34,6 +35,13 @@ enum Prefs {
     static var voicesKeepDays: Int {
         get { max(0, defaults.integer(forKey: "voicesKeepDays")) }
         set { defaults.set(newValue, forKey: "voicesKeepDays") }
+    }
+
+    /// Dictations are kept in the history for this many days; 0 = forever (the default). The
+    /// statistics are computed from the history, so older dictations leave them too.
+    static var dictationKeepDays: Int {
+        get { max(0, defaults.integer(forKey: "dictationKeepDays")) }
+        set { defaults.set(newValue, forKey: "dictationKeepDays") }
     }
 
     /// Who sent a voice message, read from Telegram's database (`TelegramPostbox`).

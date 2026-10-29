@@ -138,7 +138,10 @@ struct VoicesView: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: .topLeading)
-            SideFooter(shortcut: HotkeyMonitor.shared.voicesShortcut.title) { status }
+            SideFooter(shortcut: HotkeyMonitor.shared.voicesShortcut.title) {
+                AllHistoryButton(kind: .voices, close: close)
+                status.padding(.leading, 6)
+            }
         }
         .padding(10)
         .frame(width: SideColumn.width, height: SideColumn.height)

@@ -29,15 +29,16 @@ used, and the app registers itself as a login item.
   on hover, 0.3 s, like a submenu), "История буфера ›" (`ClipboardSide`, asked 2026-10-28: the
   30 newest entries, a snapshot taken on opening and on each search, so copying, which moves an
   entry to the top, does not reorder it; search as in the history window; text in 3 lines,
-  images as thumbnails; a click copies with formatting, as ⌥⏎; "Вся история…" opens the window;
+  images as thumbnails; a click copies with formatting, as ⌥⏎; "Вся история…" opens the settings' История → Буфер обмена;
   the entry under the pointer opens the history window's preview on the left of the panel,
   `ClipboardHoverPreview`: after 0.6 s, then at once from row to row; it stays while the pointer is
   on it, so a long text can be scrolled, and goes 0.3 s after the pointer left both).
   The columns have one fixed size (`SideColumn`, 400 × 436 pt, the history's), so switching between them or
   voice texts arriving never resize the panel (it jumped, 2026-10-28), and they look the same
   (asked 2026-10-28: the margins differed): search field, rows of `SideRow` (date line with copy
-  and delete, the text under it; a click copies and closes the panel), `SideFooter` (left: "Вся
-  история…" or the voices' status; right: the shortcut); then
+  and delete, the text under it; a click copies and closes the panel), `SideFooter` (left:
+  `AllHistoryButton` "Вся история…" in every column, opening the settings' История on that
+  column's tab, the voices' status after it; right: the shortcut; asked 2026-10-29); then
   **"Исправлять текст"** (= not paused: one switch instead of Genius Switcher's separate "Пауза",
   which confused the owner next to "Автоисправление") and under it "в «app in front»"
   (`autoOffApps`); "Клавиши не видны: защищённый ввод" while macOS Secure Input is on
@@ -51,8 +52,9 @@ used, and the app registers itself as a login item.
   permissions with their state), Раскладка, Буфер обмена, Диктовка, История (dictations),
   Статистика (Печать = the journal numbers, `TypingStatsView`; Диктовка = `DictationStatsView`).
   **The rule**: Раскладка, Буфер обмена and Диктовка each start with their own switch
-  (`ModuleSwitch`), everything under it is grey and inactive while it is off (`.active(_:)`), the
-  sidebar has a green dot for the parts that are on. The model and its settings are inside
+  (`ModuleSwitch`), everything under it is grey and inactive while it is off (`.active(_:)`). The
+  sidebar had green dots for the parts that are on; removed 2026-10-29, the owner found them
+  unclear. The model and its settings are inside
   Диктовка. "Переключать раскладку клавишей Caps Lock" is its own section in Раскладка and works
   even while fixing is off. Switches are `LightSwitchStyle` (the system one took ~100 MB of
   graphics memory), menus are `Menu`, segments are `Segments`, no `TabView`.
@@ -252,10 +254,16 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   two views, one picked at random per dictation — front (crop 854:467:0:13; slow 1.0–4.0 s, fast
   4.3–6.3 s) and side (crop 690:460:110:20; slow 6.7–8.9 s, fast 11.55–13.9 s). Each starts slow
   and switches to the fast loop after 3 s of speech; a pause over 1.5 s starts slow again.
-- **История** in the settings (`HistoryPage`) has two tabs (`Segments`, `historyKind`, asked
-  2026-10-28): "Диктовки" and "Голосовые из Telegram" (the stored texts, `storedTexts()`: search,
-  copy, delete, click unfolds; at the bottom the count, the size of `voice-texts.json` and how long
-  they are kept).
+- **История** in the settings (`HistoryPage`) has three tabs (`Segments`, `historyKind`, asked
+  2026-10-28, the clipboard added 2026-10-29): "Диктовки", "Голосовые из Telegram" (the stored
+  texts, `storedTexts()`) and "Буфер обмена" (a snapshot of `ClipboardStore.items`, thumbnails for
+  images; pasting and the preview stay in the ⇧⌘C window). Each tab is laid out the same: an "off"
+  line with "Включить…" while its part is off, search, `HistoryRow`s (click unfolds, copy, delete,
+  the date line on one line), `HistoryFooter`: count · size on the left, "Хранить: …" and
+  "Изменить…" (to the page where it is set) on the right. Dictations are kept forever by default;
+  Диктовка → История → "Хранить диктовки" (`dictationKeepDays`: 30/90/365 days or always; a
+  shorter period asks first) deletes older ones after each dictation (`History.prune`), their
+  statistics with them.
 - **History** (`History`, SQLite `~/Library/Application Support/GeniusTyper/dictation/history.sqlite`): text
   only (no audio), forever: date, text, words, duration, app, model. Paged from disk, Cyrillic
   case-insensitive search (`lower_ru`), copy, delete. The left-click panel's column: a click on a

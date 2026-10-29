@@ -57,6 +57,7 @@ defaults write com.dmemruk.GeniusTyper autoOffApps -array-add com.sublimetext.4
 | `dictationYo` | bool | `true` | ё in dictated text. |
 | `dictationSounds` | bool | `true` | Start and done sounds. |
 | `escCancels` | bool | `true` | Esc cancels a recording. |
+| `dictationKeepDays` | int | `0` | Dictations are kept in the history this many days (30 / 90 / 365; 0 = forever). Older ones are deleted after each dictation, with their statistics. |
 | `levelStyle` | string | `bars` | Microphone level in the pill: `bars`, `wave`, `line`. |
 | `levelScales` | data (JSON) | — | Learnt scale of the level bars per microphone name (`floor`, `peak`, in level units of 40 dB per 1.0); written when a dictation ends. Delete it to start over. |
 | `mascot` | string | `none` | Animation above the pill: `none`, `wigCat`, `bruce` (the removed `monkey` and `greyCat` read as `none`). |

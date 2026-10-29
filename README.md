@@ -71,6 +71,9 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
   app icons, preview, ⏎ pastes, ⇧⏎ pastes without formatting, ⌘1…9.
 - The newest entries also sit in the menu bar icon's left-click menu: point at "История буфера" for
   the list with search; a click copies an entry, the one under the pointer shows its preview.
+- Settings → История has the whole clipboard history next to the dictations and the voice
+  messages ("Вся история…" under each list of the left-click menu opens its tab), with the same
+  line under each: how many, the space taken and how long they are kept.
 - Text, rich text, images and files; a size limit in MB.
 - Skips password managers, private/transient pasteboard types and crypto seed phrases.
 
@@ -87,7 +90,8 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
   your own key (stored in the Keychain).
 - A small pill at the bottom of the screen with the microphone level (its scale adapts to the
   microphone and the room, and is remembered per microphone), ё restored in the text,
-  history with search and statistics (words, words per minute, time saved).
+  history with search, kept forever or for 30 days / 90 days / a year, and statistics (words,
+  words per minute, time saved).
 - **Telegram voice messages**: the newest voice messages from the official Telegram app's cache,
   transcribed locally and kept for a few days or forever, each with who sent it (the person, or
   the author and the group); search them, copy or delete each text, also in the settings' history.

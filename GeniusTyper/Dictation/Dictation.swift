@@ -168,6 +168,7 @@ final class Dictation: ObservableObject {
                 }
                 History.shared.add(text: text, duration: duration, appBundle: target?.bundleIdentifier ?? "",
                                    appName: target?.localizedName ?? "", model: model)
+                History.shared.prune(keepDays: Prefs.dictationKeepDays)
             } catch {
                 phase = .idle
                 Sounds.play(.failure)

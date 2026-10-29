@@ -126,8 +126,7 @@ private enum Side: String { case voices, history, clipboard }
 
 /// The size of the side columns (voices, dictations, clipboard) and of their lists, so switching between
 /// them or new voice texts arriving never resize the panel (it jumped, 2026-10-28).
-/// The whole column has a fixed size and its list takes what is left (the footers differ: a link
-/// under the history, a status line under the voices).
+/// The whole column has a fixed size and its list takes what is left.
 enum SideColumn {
     static let width: CGFloat = 400
     static let height: CGFloat = 436
@@ -362,11 +361,7 @@ private struct HistorySide: View {
             }
             .frame(maxHeight: .infinity, alignment: .topLeading)
             SideFooter(shortcut: HotkeyMonitor.shared.shortcut.title) {
-                Button("Вся история…") {
-                    close()
-                    SettingsWindow.shared.show(page: .history)
-                }
-                .buttonStyle(.link)
+                AllHistoryButton(kind: .dictations, close: close)
             }
         }
         .padding(10)
@@ -436,11 +431,7 @@ private struct ClipboardSide: View {
             }
             .frame(maxHeight: .infinity, alignment: .topLeading)
             SideFooter(shortcut: store.hotKey.title) {
-                Button("Вся история…") {
-                    close()
-                    DispatchQueue.main.async { ClipboardWindow.show() }
-                }
-                .buttonStyle(.link)
+                AllHistoryButton(kind: .clipboard, close: close)
             }
         }
         .padding(10)
@@ -601,7 +592,22 @@ struct SideRow<Content: View>: View {
     }
 }
 
-/// The line under a side column's list: something on the left, the column's shortcut on the right.
+/// "Вся история…" under each side column: the settings' История on the column's tab.
+struct AllHistoryButton: View {
+    let kind: HistoryPage.Kind
+    let close: () -> Void
+
+    var body: some View {
+        Button("Вся история…") {
+            close()
+            SettingsWindow.shared.show(history: kind)
+        }
+        .buttonStyle(.link)
+    }
+}
+
+/// The line under a side column's list, the same in every column: "Вся история…" on the left (the
+/// voices add their status after it), the column's shortcut on the right.
 struct SideFooter<Leading: View>: View {
     let shortcut: String
     @ViewBuilder let leading: Leading
