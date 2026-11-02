@@ -26,31 +26,28 @@ final class AudioRecorder {
 
     func start() throws {
         guard engine == nil else { return }
-        let engine = AVAudioEngine()
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw NSError(domain: "GeniusTyper", code: 1, userInfo: [NSLocalizedDescriptionKey: String(localized: "Нет микрофона")])
+        lock.withLock {
+            samples.removeAll(keepingCapacity: false)
+            samples.reserveCapacity(Int(Self.sampleRate) * 20)
+            lastBuffer = 0
         }
-        converter = AVAudioConverter(from: format, to: outputFormat)
-        lock.withLock { samples.removeAll(keepingCapacity: false); samples.reserveCapacity(Int(Self.sampleRate) * 20) }
-        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
-            self?.append(buffer)
-        }
-        engine.prepare()
-        try engine.start()
-        self.engine = engine
-        Log.info("Recording from \(Self.inputName) (\(Int(format.sampleRate)) Hz, \(format.channelCount) ch)", "audio")
+        startedAt = ProcessInfo.processInfo.systemUptime
+        restarts = 0
+        restartedAt = 0
+        firstAudioLogged = false
+        try startEngine()
+        Log.info("Recording from \(Self.inputName) (\(Int(engine?.inputNode.outputFormat(forBus: 0).sampleRate ?? 0)) Hz, "
+                 + "\(engine?.inputNode.outputFormat(forBus: 0).channelCount ?? 0) ch)", "audio")
+        startWatchdog()
     }
 
     /// Stops and returns everything recorded.
     @discardableResult
     func stop() -> [Float] {
-        guard let engine else { return [] }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        self.engine = nil
-        converter = nil
+        guard engine != nil else { return [] }
+        watchdog?.invalidate()
+        watchdog = nil
+        stopEngine()
         let result = lock.withLock {
             let result = samples
             samples = []
@@ -59,7 +56,93 @@ final class AudioRecorder {
         return result
     }
 
+    // MARK: - Engine
+
+    private var startedAt: TimeInterval = 0
+    /// Uptime of the last buffer from the microphone (0: none yet); written on the audio thread.
+    private var lastBuffer: TimeInterval = 0
+    private var restarts = 0
+    private var restartedAt: TimeInterval = 0
+    private var firstAudioLogged = false
+    private var watchdog: Timer?
+    private var configObserver: NSObjectProtocol?
+
+    private func startEngine() throws {
+        let engine = AVAudioEngine()
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw NSError(domain: "GeniusTyper", code: 1, userInfo: [NSLocalizedDescriptionKey: String(localized: "Нет микрофона")])
+        }
+        converter = AVAudioConverter(from: format, to: outputFormat)
+        input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
+            self?.append(buffer)
+        }
+        // AirPods switch to their headset mode when the microphone opens: macOS reconfigures the
+        // device and stops the engine without a word, and no buffer ever comes (2026-11-02: 51
+        // dictations held 3–5 s recorded 0 s, the pill's line stood still). Start it again.
+        configObserver = NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange,
+                                                                object: engine, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restart(reason: "audio device changed") }
+        }
+        engine.prepare()
+        self.engine = engine
+        do {
+            try engine.start()
+        } catch {
+            stopEngine()
+            throw error
+        }
+    }
+
+    private func stopEngine() {
+        if let configObserver { NotificationCenter.default.removeObserver(configObserver) }
+        configObserver = nil
+        guard let engine else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        self.engine = nil
+        converter = nil
+    }
+
+    /// A new engine on the (possibly new) input format; what was recorded stays.
+    @MainActor private func restart(reason: String) {
+        guard engine != nil else { return }
+        restarts += 1
+        restartedAt = ProcessInfo.processInfo.systemUptime
+        let silent = ProcessInfo.processInfo.systemUptime - max(lock.withLock { lastBuffer }, startedAt)
+        Log.warning(String(format: "Microphone restarted (%@, %.1f s without sound, restart %d)", reason, silent, restarts), "audio")
+        stopEngine()
+        do {
+            try startEngine()
+        } catch {
+            Log.error("Microphone did not restart: \(Log.describe(error))", "audio")
+        }
+    }
+
+    /// While recording: a microphone silent for 0.7 s (not a quiet one: no buffers at all) is
+    /// restarted, at most 5 times; it also logs how long the first sound took when it was late.
+    private func startWatchdog() {
+        watchdog = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.engine != nil else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                let last = self.lock.withLock { self.lastBuffer }
+                if last > 0, !self.firstAudioLogged {
+                    self.firstAudioLogged = true
+                    if last - self.startedAt > 0.5 {
+                        Log.info(String(format: "First sound from the microphone after %.2f s", last - self.startedAt), "audio")
+                    }
+                }
+                if now - max(last, self.startedAt, self.restartedAt) > 0.7, self.restarts < 5 {
+                    self.restart(reason: "no sound")
+                }
+            }
+        }
+    }
+
     private func append(_ buffer: AVAudioPCMBuffer) {
+        lock.withLock { lastBuffer = ProcessInfo.processInfo.systemUptime }
         guard let converter else { return }
         let capacity = AVAudioFrameCount(Double(buffer.frameLength) * outputFormat.sampleRate / buffer.format.sampleRate) + 32
         guard let out = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return }

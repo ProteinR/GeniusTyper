@@ -155,7 +155,10 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   recording: Esc cancels (switch, swallowed), another key or modifier while the dictation modifier
   is held cancels silently (it was ⌥+key). Start sound and pill come 0.15 s late for that reason.
 - **Recording** (`AudioRecorder`): default microphone via `AVAudioEngine`, converted to 16 kHz
-  mono; the engine exists only while recording. Shorter than 0.3 s is dropped.
+  mono; the engine exists only while recording. Shorter than 0.3 s is dropped. The engine is
+  started again on `AVAudioEngineConfigurationChange` and when no buffer came for 0.7 s (at most
+  5 times; log "Microphone restarted", "First sound … after"): AirPods switching to their headset
+  mode stopped it silently, and 51 dictations held for seconds recorded 0 s (2026-11-02).
 - **Engines**: local **Parakeet Ultra** (default since 0.18.0, `parakeetUltra`; Moondream's
   post-trained v3, same architecture and speed, int8 encoder, ~630 MB, folder
   `FluidAudio/Models/parakeet-ultra`) or **Parakeet TDT 0.6B v3** (NVIDIA, `parakeetV3`, ~470 MB)
