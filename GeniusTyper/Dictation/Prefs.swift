@@ -5,9 +5,17 @@ enum Prefs {
     private static let defaults = UserDefaults.standard
 
     static func register() {
+        // Telegram voices are off on a fresh install since 0.21.1: they read another app's data,
+        // which macOS asks about. Who already has transcribed voices relied on the old default
+        // (on), so it is written down for them once.
+        if defaults.object(forKey: "voicesEnabled") == nil,
+           FileManager.default.fileExists(atPath: VoiceTranscripts.storeURL.path) {
+            defaults.set(true, forKey: "voicesEnabled")
+            Log.info("Telegram voices kept on (voice texts exist; the default is now off)", "voices")
+        }
         defaults.register(defaults: [
             "dictationEnabled": false,
-            "voicesEnabled": true,
+            "voicesEnabled": false,
             "voicesKeepDays": 7,
             "dictationKeepDays": 0,
             "voicesSenders": true,

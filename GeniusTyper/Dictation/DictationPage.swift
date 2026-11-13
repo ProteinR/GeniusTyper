@@ -8,7 +8,7 @@ struct DictationPage: View {
     @AppStorage("dictationSounds") private var sounds = true
     @AppStorage("escCancels") private var escCancels = true
     @AppStorage("dictationYo") private var yo = true
-    @AppStorage("voicesEnabled") private var voices = true
+    @AppStorage("voicesEnabled") private var voices = false
     @AppStorage("voicesKeepDays") private var keepDays = 7
     @AppStorage("voicesSenders") private var senders = true
     @AppStorage("dictationKeepDays") private var dictationKeepDays = 0

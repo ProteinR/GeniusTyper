@@ -417,7 +417,7 @@ final class VoiceTranscripts: ObservableObject {
         isLoading = false
     }
 
-    private static var storeURL: URL {
+    nonisolated static var storeURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("GeniusTyper/dictation/voice-texts.json")
     }

@@ -139,7 +139,7 @@ used, and the app registers itself as a login item.
 
 Off by default on a fresh install (`Prefs.dictationEnabled`, the Диктовка switch): off = no key
 tap, no hot keys, no microphone, the model unloaded (`Dictation.setEnabled`). "Голосовые из
-Telegram" has its own switch (`voicesEnabled`) inside it. **ё in dictated text** (`dictationYo`,
+Telegram" has its own switch (`voicesEnabled`) inside it, off on a fresh install since 0.21.1 (asked 2026-11-13: it reads another app's data, which macOS asks about; off = no panel row, no ⌃⌥V, Telegram's folder never read); `Prefs.register` keeps it on once for whoever already has `voice-texts.json`. **ё in dictated text** (`dictationYo`,
 on by default): `Yoficator.restoreText` runs over the transcript before pasting (Parakeet nearly
 always writes е). Its hot keys and Genius Typer's clipboard hot key are Carbon hot keys with their
 own handlers on the same target: each handler takes only its own signature ("DKTY" / "GSKY") and

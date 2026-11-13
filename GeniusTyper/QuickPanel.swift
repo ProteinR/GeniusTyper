@@ -140,7 +140,7 @@ private struct QuickMenuView: View {
     @ObservedObject private var observer = Observer.shared
     @ObservedObject private var clipboard = ClipboardStore.shared
     @AppStorage("dictationEnabled") private var dictation = false
-    @AppStorage("voicesEnabled") private var voices = true
+    @AppStorage("voicesEnabled") private var voices = false
     /// Who holds Secure Input, checked when the panel opens.
     @State private var secureInput = SecureInput.holder()
 

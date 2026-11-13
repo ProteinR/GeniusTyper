@@ -109,7 +109,7 @@ private struct DictationHistory: View {
 private struct VoiceHistory: View {
     @ObservedObject var navigation: SettingsWindow.Navigation
     @AppStorage("dictationEnabled") private var dictation = false
-    @AppStorage("voicesEnabled") private var voices = true
+    @AppStorage("voicesEnabled") private var voices = false
     @AppStorage("voicesKeepDays") private var keepDays = 7
     @State private var search = ""
     @State private var all: [VoiceText] = []
