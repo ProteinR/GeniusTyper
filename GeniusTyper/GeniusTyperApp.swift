@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuItems: { [weak self] in self?.contextMenuItems() ?? [] })
         Observer.shared.start()
         ClipboardStore.shared.start()
+        Updater.shared.start()
         Dictation.shared.onPhase = { MenuBarIcon.shared.dictationPhase = $0 }
         if Prefs.dictationEnabled {
             Dictation.shared.start()
@@ -184,12 +185,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = NSMenuItem(title: "Настройки…", action: #selector(showSettings), keyEquivalent: ",")
         settings.target = self
         items.append(settings)
+        let update = NSMenuItem(title: "Проверить обновления…", action: #selector(checkForUpdates), keyEquivalent: "")
+        update.target = self
+        items.append(update)
         return items
     }
 
     @MainActor @objc private func showSettings() { SettingsWindow.shared.show() }
     @MainActor @objc private func showDictationHistory() { SettingsWindow.shared.show(page: .history) }
     @MainActor @objc private func showClipboard() { ClipboardWindow.show() }
+    /// Checks at once and shows the answer in Основное → Обновления (and the panel's banner).
+    @MainActor @objc private func checkForUpdates() {
+        SettingsWindow.shared.show(page: .general)
+        Task { await Updater.shared.check(userInitiated: true) }
+    }
     @MainActor @objc private func toggleFixing() { Observer.shared.paused.toggle() }
 }
 

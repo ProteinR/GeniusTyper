@@ -432,6 +432,35 @@ recognised (`MenuBarIcon.dictationPhase`). Основное → "Язык на �
 it the language is the whole icon ("RU" in a frame, or a flag). Meant to replace macOS's own input
 menu (System Settings → Keyboard → Input Sources).
 
+## Updates and releases
+
+`Updater.swift` (MXCtl's and MeetRec's scheme, no Sparkle: its framework and XPC services would
+cost memory for no extra safety): GitHub `releases/latest` a minute after launch and every 6 h
+(`checkForUpdates`, last check `lastUpdateCheck`). A newer one: `UpdateBanner` at the top of the
+left-click panel (Обновить · Позже = hidden 24 h, `snoozedUpdateVersion/Until` · Пропустить =
+`skippedUpdateVersion`, a newer one shows again). No notification (it would need one more
+permission). Основное → Обновления (`UpdateSettings`): check, install automatically
+(`installUpdatesAutomatically`, off; waits for 2 min of no input **and no dictation**),
+"Проверить сейчас" (also "Проверить обновления…" in the right-click menu), which clears skip and
+snooze for the found version. Install: `.zip` next to the app, SHA-256 against the asset's GitHub
+`digest`, bundle id, version, newer, designated requirement of the running copy with nested code
+(the engine helper and SQLCipher), wait for a dictation in progress to finish, swap in place, quit
+(Caps Lock given back), a shell reopens it. Only a copy signed "Genius Typer Release Signing"
+self-updates; `install.sh` builds (local certificate) say to update the way they were built.
+
+Releases: `.github/workflows/release.yml` on a tag `vX.Y.Z` (= `MARKETING_VERSION`) or by hand
+(Actions → Release → Run workflow): `scripts/test.sh`, then `scripts/make-release.sh` (universal
+arm64 + x86_64, signed inside out: SQLCipher, `GeniusTyperEngine`, the app, not `--deep`;
+`GeniusTyper-X.Y.Z.dmg` + `.zip` + `SHA256SUMS`), signed with the secrets `GENIUSTYPER_CERT_P12`
+(base64 .p12) and `GENIUSTYPER_CERT_PASSWORD`; notes = commits since the previous tag +
+`.github/release-notes.md`. `.github/workflows/ci.yml` runs the tests on every push to main and
+every pull request. The certificate must never change (users' permissions are tied to it); the
+.p12 (created 2026-11-13, valid to 2046, leaf 788ae44d…) is in `../GeniusTyper-release-signing/`
+(its README), the password in the login Keychain ("Genius Typer Release Signing p12 password");
+never commit or push either. The owner's own copy switched to releases on 2026-11-13 (one more
+round of granting the permissions); `install.sh` over it brings back the local certificate and the
+permissions have to be granted again.
+
 ## Versions
 
 Every fix or feature bumps the version (`project.yml`). The pre-commit hook

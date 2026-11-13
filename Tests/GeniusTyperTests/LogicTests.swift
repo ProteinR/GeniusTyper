@@ -603,3 +603,59 @@ final class YoficatorTests: XCTestCase {
         }
     }
 }
+
+/// The updater's pure rules: versions, the GitHub answer, checksums, skip/snooze, where it may swap itself.
+final class UpdaterTests: XCTestCase {
+    func testVersions() {
+        XCTAssertTrue(Updater.isNewer("0.21.0", than: "0.20.9"))
+        XCTAssertTrue(Updater.isNewer("v0.20.10", than: "0.20.9"))
+        XCTAssertTrue(Updater.isNewer("1.0", than: "0.99.99"))
+        XCTAssertFalse(Updater.isNewer("0.20.1", than: "0.20.1"))
+        XCTAssertFalse(Updater.isNewer("0.20", than: "0.20.0"))
+        XCTAssertFalse(Updater.isNewer("0.19.9", than: "0.20.0"))
+    }
+
+    func testParseRelease() throws {
+        let json = """
+        {"tag_name":"v0.21.0","html_url":"https://github.com/ProteinR/GeniusTyper/releases/tag/v0.21.0",
+         "draft":false,"prerelease":false,"assets":[
+          {"name":"GeniusTyper-0.21.0.dmg","browser_download_url":"https://example.com/a.dmg","digest":"sha256:00"},
+          {"name":"GeniusTyper-0.21.0.zip","browser_download_url":"https://example.com/a.zip","digest":"sha256:ab"}]}
+        """
+        let release = try XCTUnwrap(Updater.parseRelease(Data(json.utf8)))
+        XCTAssertEqual(release.version, "0.21.0")
+        XCTAssertEqual(release.archive.absoluteString, "https://example.com/a.zip")
+        XCTAssertEqual(release.digest, "sha256:ab")
+        let pre = json.replacingOccurrences(of: "\"prerelease\":false", with: "\"prerelease\":true")
+        XCTAssertNil(Updater.parseRelease(Data(pre.utf8)))
+        let noZip = #"{"tag_name":"v1","html_url":"https://x.y","assets":[{"name":"a.dmg","browser_download_url":"https://x.y/a"}]}"#
+        XCTAssertNil(Updater.parseRelease(Data(noZip.utf8)))
+    }
+
+    func testDigest() {
+        let data = Data("abc".utf8)
+        let hex = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        XCTAssertTrue(Updater.digestMatches("sha256:\(hex)", data))
+        XCTAssertTrue(Updater.digestMatches("SHA256:\(hex.uppercased())", data))
+        XCTAssertFalse(Updater.digestMatches("sha256:00", data))
+        XCTAssertFalse(Updater.digestMatches("md5:00", data))
+        XCTAssertTrue(Updater.digestMatches(nil, data))
+    }
+
+    func testOffered() {
+        let now = Date()
+        XCTAssertTrue(Updater.isOffered("1.0", skipped: "", snoozed: "", snoozedUntil: .distantPast, now: now))
+        XCTAssertFalse(Updater.isOffered("1.0", skipped: "1.0", snoozed: "", snoozedUntil: .distantPast, now: now))
+        XCTAssertTrue(Updater.isOffered("1.1", skipped: "1.0", snoozed: "", snoozedUntil: .distantPast, now: now))
+        XCTAssertFalse(Updater.isOffered("1.0", skipped: "", snoozed: "1.0", snoozedUntil: now.addingTimeInterval(60), now: now))
+        XCTAssertTrue(Updater.isOffered("1.0", skipped: "", snoozed: "1.0", snoozedUntil: now.addingTimeInterval(-60), now: now))
+    }
+
+    func testLocation() {
+        let writable: (String) -> Bool = { _ in true }
+        XCTAssertFalse(Updater.locationBlocks(URL(fileURLWithPath: "/Applications/Genius Typer.app"), writable: writable))
+        XCTAssertTrue(Updater.locationBlocks(URL(fileURLWithPath: "/Volumes/Genius Typer/Genius Typer.app"), writable: writable))
+        XCTAssertTrue(Updater.locationBlocks(URL(fileURLWithPath: "/private/var/folders/x/AppTranslocation/y/d/Genius Typer.app"), writable: writable))
+        XCTAssertTrue(Updater.locationBlocks(URL(fileURLWithPath: "/Applications/Genius Typer.app"), writable: { _ in false }))
+    }
+}

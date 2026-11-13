@@ -1,0 +1,23 @@
+# Unit tests on every push to main and every pull request (the release workflow runs them again
+# before it builds).
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "LICENSE"]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: brew install xcodegen
+      - name: Tests
+        run: ./scripts/test.sh

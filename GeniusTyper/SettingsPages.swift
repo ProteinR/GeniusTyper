@@ -61,6 +61,7 @@ struct GeneralPage: View {
                     }
                 }
             }
+            UpdateSettings()
         }
         .formStyle(.grouped)
         .toggleStyle(LightSwitchStyle())

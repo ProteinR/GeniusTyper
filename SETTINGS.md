@@ -76,6 +76,16 @@ account = the engine (`groq`, `openAI`, `custom`).
 | `iconShowsSymbol` | bool | `true` | The "G" icon. |
 | `iconLanguageMark` | string | `none` | Current language on the icon: `none`, `text` (RU / EN), `flag`. |
 
+## Updates (Основное → Обновления)
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `checkForUpdates` | bool | `true` | Ask GitHub for a newer release a minute after launch and every 6 hours. |
+| `installUpdatesAutomatically` | bool | `false` | Install a found release by itself after 2 minutes without keyboard or mouse input and no dictation. |
+| `skippedUpdateVersion` | string | empty | "Пропустить": this version is not offered (a newer one is). |
+
+`snoozedUpdateVersion`, `snoozedUpdateUntil` ("Позже", a day) and `lastUpdateCheck` are kept by the app.
+
 ## Statistics window
 
 `statsKind`, `statsPeriod`, `statsShowWeek`, `historyKind`: the last tab and period shown; nothing to set by hand.

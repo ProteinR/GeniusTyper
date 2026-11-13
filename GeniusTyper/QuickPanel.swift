@@ -164,6 +164,8 @@ private struct QuickMenuView: View {
         .fixedSize()
         .toggleStyle(LightSwitchStyle())
         .onAppear { side = initialSide }
+        // The update banner grows or goes (downloading, an error, skipped) while the panel is open.
+        .onReceive(Updater.shared.$state.dropFirst()) { _ in DispatchQueue.main.async(execute: resized) }
         .onChange(of: side) { old, new in
             // The voices keep transcribing while the history is shown; the panel's close clears them.
             if new == .voices { VoiceTranscripts.shared.refreshIfEmpty() }
@@ -173,6 +175,7 @@ private struct QuickMenuView: View {
 
     private var main: some View {
         VStack(alignment: .leading, spacing: 2) {
+            UpdateBanner()
             if dictation && voices {
                 MenuRow(icon: "waveform", title: "Голосовые из Telegram",
                         detail: HotkeyMonitor.shared.voicesShortcut.title, opens: true, selected: side == .voices) {

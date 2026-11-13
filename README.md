@@ -150,12 +150,26 @@ same scripts against both apps.
 - The clipboard history is stored locally in `~/Library/Application Support/GeniusTyper/`.
 - Dictation is local unless you choose a cloud engine. Audio is never saved.
 - Password managers are excluded; secure input fields are invisible to the app.
+- The only request it makes by itself is the update check: GitHub's latest release of this
+  repository, every 6 hours (Settings → Основное → Обновления turns it off).
 
 ## Requirements
 
 - macOS 15 or later. Apple Silicon recommended for local dictation (Neural Engine).
 - Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 - An English and a Russian keyboard layout in System Settings → Keyboard → Input Sources.
+
+## Download
+
+[Releases](https://github.com/ProteinR/GeniusTyper/releases/latest) have a universal
+`GeniusTyper-<version>.dmg`: open it and drag Genius Typer to Applications. It is not notarized
+(no Apple Developer account), so macOS blocks the first launch: open it once, then System Settings
+→ Privacy & Security → "Open Anyway" (or `xattr -dr com.apple.quarantine "/Applications/Genius
+Typer.app"`). Releases are signed with one self-signed certificate, so the permissions survive
+updates, and the app updates itself: "Доступна версия" at the top of the menu bar panel
+(Обновить · Позже · Пропустить), Settings → Основное → Обновления to check now, turn the checks off
+or install automatically. An update is installed only if it is signed with the same certificate
+and matches the checksum GitHub lists for it.
 
 ## Build and install
 
@@ -177,7 +191,7 @@ is downloaded from Hugging Face then.
 
 ### Signing (keeps permissions across rebuilds)
 
-There are no signed binary releases (no Apple Developer account). Without a stable signature every
+A copy built from source does not update itself (its certificate is not the release one). Without a stable signature every
 rebuild looks like a new app to macOS and the permissions have to be granted again. To avoid that,
 create a self-signed code signing certificate once:
 
