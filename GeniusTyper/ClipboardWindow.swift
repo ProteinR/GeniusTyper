@@ -16,6 +16,8 @@ enum ClipboardWindow {
     static let height: CGFloat = 520
     static let previewWidth: CGFloat = 400
     static let previewDelay: TimeInterval = 1.5
+    /// Room around the card for its own shadow: the window is this much bigger on every side.
+    static let margin: CGFloat = 28
 
     private static var panel: KeyPanel?
     private static var preview: NSPanel?
@@ -42,12 +44,13 @@ enum ClipboardWindow {
             origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - width - 8)
             origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - height - 8)
         }
-        panel.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: height)), display: false)
+        let card = NSRect(origin: origin, size: NSSize(width: width, height: height))
+        panel.setFrame(card.insetBy(dx: -margin, dy: -margin), display: false)
         closing = false
         panel.ignoresMouseEvents = false
         panel.contentView?.layer?.removeAnimation(forKey: "close")
         panel.makeKeyAndOrderFront(nil)
-        animateOpening(panel, from: NSPoint(x: mouse.x - origin.x, y: mouse.y - origin.y))
+        animateOpening(panel, from: NSPoint(x: mouse.x - origin.x + margin, y: mouse.y - origin.y + margin))
         if monitor == nil {
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 let key = Key(window: event.windowNumber, code: event.keyCode,
@@ -64,7 +67,7 @@ enum ClipboardWindow {
         let panel = makePanel()
         Self.panel = panel
         model.open()
-        panel.setContentSize(NSSize(width: width, height: height))
+        panel.setContentSize(NSSize(width: width + 2 * margin, height: height + 2 * margin))
         panel.contentView?.layoutSubtreeIfNeeded()
         model.close()
     }
@@ -85,7 +88,8 @@ enum ClipboardWindow {
         if !reduce {
             // The scale is about the pointer; the transform works about the layer's anchor point.
             let anchor = NSPoint(x: layer.anchorPoint.x * layer.bounds.width, y: layer.anchorPoint.y * layer.bounds.height)
-            let dx = min(max(pointer.x, 0), width) - anchor.x, dy = min(max(pointer.y, 0), height) - anchor.y
+            let dx = min(max(pointer.x, margin), margin + width) - anchor.x
+            let dy = min(max(pointer.y, margin), margin + height) - anchor.y
             var start = CATransform3DMakeTranslation(dx, dy, 0)
             start = CATransform3DScale(start, 0.92, 0.92, 1)
             start = CATransform3DTranslate(start, -dx, -dy, 0)
@@ -98,19 +102,7 @@ enum ClipboardWindow {
         group.animations = animations
         group.duration = reduce ? 0.12 : 0.18
         group.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)
-        // The window's shadow and edge are the WindowServer's, at full size from the first frame:
-        // they showed as a frame around the growing content. Off while it grows, back at the end.
-        panel.hasShadow = false
-        CATransaction.begin()
-        CATransaction.setCompletionBlock {
-            MainActor.assumeIsolated {
-                guard !closing, panel.isVisible else { return }
-                panel.hasShadow = true
-                panel.invalidateShadow()
-            }
-        }
         layer.add(group, forKey: "open")
-        CATransaction.commit()
     }
 
     /// Esc, ⌘W, a click elsewhere, the shortcut again: fades out in 0.1 s (the content layer's
@@ -125,7 +117,6 @@ enum ClipboardWindow {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         panel.ignoresMouseEvents = true
-        panel.hasShadow = false
         CATransaction.begin()
         CATransaction.setCompletionBlock {
             MainActor.assumeIsolated {
@@ -152,7 +143,6 @@ enum ClipboardWindow {
         panel.ignoresMouseEvents = false
         panel.orderOut(nil)
         panel.contentView?.layer?.removeAllAnimations()
-        panel.hasShadow = true
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         Memory.giveBackSoon()
@@ -240,9 +230,14 @@ enum ClipboardWindow {
         panel.isReleasedWhenClosed = false
         panel.backgroundColor = .clear
         panel.isOpaque = false
-        panel.hasShadow = true
+        // Its own shadow and hairline (`CardView`, as MeetRec's panel): the window's, drawn by the
+        // WindowServer, stayed full size while the card grew, and its light edge came on top of
+        // the window after it had opened (2026-11-20).
+        panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
-        panel.contentView = Background(content: NSHostingView(rootView: ClipboardListView().environmentObject(model)))
+        panel.contentView = CardView(card: Background(content: NSHostingView(rootView: ClipboardListView().environmentObject(model)),
+                                                      hairline: true),
+                                     margin: margin)
         NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { _ in
             MainActor.assumeIsolated { dismiss() }  // a click elsewhere
         }
@@ -253,16 +248,19 @@ enum ClipboardWindow {
 
     static func showPreview(_ item: ClipboardItem) {
         guard let panel, panel.isVisible else { return }
-        showPreview(item, beside: panel)
+        showPreview(item, beside: panel, frame: panel.frame.insetBy(dx: margin, dy: margin))
     }
 
     /// The preview beside `window` (the history window or the left-click panel), on the right when
     /// it fits there (`left`: on the left first), no taller than the window. `hover` hears the
     /// pointer entering and leaving it.
-    static func showPreview(_ item: ClipboardItem, beside window: NSWindow, left: Bool = false, hover: ((Bool) -> Void)? = nil) {
+    /// `frame`: the visible part of `window`, when it is not the whole window.
+    static func showPreview(_ item: ClipboardItem, beside window: NSWindow, frame: NSRect? = nil, left: Bool = false,
+                            hover: ((Bool) -> Void)? = nil) {
+        let frame = frame ?? window.frame
         let preview = preview ?? makePreview()
         Self.preview = preview
-        let previewHeight = Self.previewHeight(item, max: window.frame.height)
+        let previewHeight = Self.previewHeight(item, max: frame.height)
         let content = ClipboardPreview(item: item, height: previewHeight, hover: hover)
         if let previewHost {
             previewHost.rootView = content
@@ -271,7 +269,6 @@ enum ClipboardWindow {
             previewHost = host
             preview.contentView = Background(content: host)
         }
-        let frame = window.frame
         let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? frame
         let right = frame.maxX + 4, leftX = frame.minX - previewWidth - 4
         let fitsRight = right + previewWidth <= visible.maxX, fitsLeft = leftX >= visible.minX
@@ -325,18 +322,68 @@ enum ClipboardWindow {
 final class KeyPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    /// A click in the shadow around the card is a click elsewhere.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown || event.type == .rightMouseDown,
+           let card = (contentView as? CardView)?.card, !card.frame.contains(event.locationInWindow) {
+            MainActor.assumeIsolated { ClipboardWindow.dismiss() }
+            return
+        }
+        super.sendEvent(event)
+    }
+}
+
+/// The card with its own soft shadow, `margin` inside the window. One layer each, the shadow from a
+/// path: nothing is drawn per frame, and the opening animation scales them together.
+private final class CardView: NSView {
+    let card: NSView
+    private let margin: CGFloat
+    private let shadowView = NSView()
+
+    init(card: NSView, margin: CGFloat) {
+        self.card = card
+        self.margin = margin
+        super.init(frame: .zero)
+        wantsLayer = true
+        shadowView.wantsLayer = true
+        shadowView.layer?.shadowColor = NSColor.black.cgColor
+        shadowView.layer?.shadowOpacity = 0.35
+        shadowView.layer?.shadowRadius = 10
+        shadowView.layer?.shadowOffset = CGSize(width: 0, height: -5)
+        addSubview(shadowView)
+        addSubview(card)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        let frame = bounds.insetBy(dx: margin, dy: margin)
+        shadowView.frame = frame
+        card.frame = frame
+        shadowView.layer?.shadowPath = CGPath(roundedRect: shadowView.bounds, cornerWidth: Background.cornerRadius,
+                                          cornerHeight: Background.cornerRadius, transform: nil)
+    }
 }
 
 /// The menu's own background (not SwiftUI materials: cheap in memory), rounded.
+/// `hairline`: a 0.5 pt light edge (MeetRec's panel), for a window without the system shadow.
 private final class Background: NSVisualEffectView {
-    init(content: NSView) {
+    static let cornerRadius: CGFloat = 10
+
+    init(content: NSView, hairline: Bool = false) {
         super.init(frame: .zero)
         material = .menu
         blendingMode = .behindWindow
         state = .active
         wantsLayer = true
-        layer?.cornerRadius = 10
+        layer?.cornerRadius = Self.cornerRadius
         layer?.masksToBounds = true
+        if hairline {
+            layer?.borderWidth = 0.5
+            layer?.borderColor = NSColor.white.withAlphaComponent(0.14).cgColor
+        }
         content.translatesAutoresizingMaskIntoConstraints = false
         addSubview(content)
         NSLayoutConstraint.activate([

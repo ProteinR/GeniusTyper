@@ -129,9 +129,12 @@ used, and the app registers itself as a login item.
   click elsewhere and the shortcut again fade it out in 0.1 s (`dismiss`), choosing an entry closes
   at once (`hide`: the ⌘V must reach the app in front). Core Animation on the content layer only
   (render server, GPU, nothing redrawn): measured ~54 ms of CPU per open + close against ~60 ms
-  instant, while the window's `alphaValue` cost ~78 ms (AppKit steps it per frame). The window
-  shadow is off while it grows and back at the end: drawn by the WindowServer at full size, it
-  showed as a frame around the growing content. ⏎ pastes (⌘V posted
+  instant, while the window's `alphaValue` cost ~78 ms (AppKit steps it per frame). No window
+  shadow (`hasShadow` off, as MeetRec's panel): the window is 28 pt bigger on every side and
+  `CardView` draws the card's own shadow (a layer with a shadow path) and a 0.5 pt white 14 %
+  hairline, so they grow with it. The WindowServer's shadow stayed full size around the growing
+  content, and turned on after the opening its light edge appeared over the window (0.22.4; the
+  owner: plainly something added on top). A click in that margin closes the window. ⏎ pastes (⌘V posted
   to the app in front, needs Accessibility), ⌥⏎ copies only, ⇧⏎ without formatting, ⌥1…9 (⌘1…9
   until 0.22.0), ⌥⌫ deletes. **Tabs** "Буфер обмена | Диктовки" while dictation is on (0.22.0,
   asked 2026-11-19: with the icon hidden a dictation pasted nowhere could not be found): it always
