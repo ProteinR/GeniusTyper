@@ -138,12 +138,6 @@ private struct CloudSection: View {
                             Text(provider.note)
                         }
                     }
-                    Divider()
-                    Button {} label: {
-                        Text("Anthropic")
-                        Text("В API Claude нет распознавания речи")
-                    }
-                    .disabled(true)
                 } label: {
                     Text(id.title)
                 }

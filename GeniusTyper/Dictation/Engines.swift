@@ -54,7 +54,7 @@ enum EngineID: String, CaseIterable, Identifiable {
         switch self {
         case .groq: return "whisper-large-v3-turbo"
         case .openAI: return "gpt-4o-transcribe"
-        case .openRouter: return "openai/whisper-large-v3"
+        case .openRouter: return "openai/gpt-transcribe"
         case .parakeetUltra, .custom: return ""
         }
     }
@@ -275,9 +275,18 @@ struct CloudEngine {
         guard status == 200, let text = json?["text"] as? String else {
             let message = (json?["error"] as? [String: Any])?["message"] as? String ?? String(data: data.prefix(300), encoding: .utf8) ?? ""
             Log.error("\(id.rawValue) HTTP \(status): \(message)", "engine")
-            throw EngineError(String(localized: "Сервис ответил ошибкой \(status)"))
+            throw EngineError(Self.describe(status: status, title: id.title))
         }
         return text
+    }
+
+    /// A short line for the pill: what went wrong in words, not only the HTTP code.
+    static func describe(status: Int, title: String) -> String {
+        switch status {
+        case 401, 403: return String(localized: "\(title): ключ не подошёл")
+        case 402, 429: return String(localized: "\(title): нет денег на счёте или лимит")
+        default: return String(localized: "\(title) ответил ошибкой \(status)")
+        }
     }
 }
 
@@ -297,8 +306,7 @@ enum CloudModels {
         let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         guard (200..<300).contains(status) else {
             Log.error("\(id.rawValue) models HTTP \(status)", "engine")
-            throw EngineError(status == 401 || status == 403 ? String(localized: "Ключ не подошёл")
-                                                              : String(localized: "Сервис ответил ошибкой \(status)"))
+            throw EngineError(CloudEngine.describe(status: status, title: id.title))
         }
         let ids = (json?["data"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
         return speechModels(ids, for: id)
@@ -312,8 +320,11 @@ enum CloudModels {
         case .groq:
             speech = ids.filter { $0.contains("whisper") }
         case .openAI:
-            // "-diarize" needs another request format.
-            speech = ids.filter { ($0.contains("transcribe") || $0.contains("whisper")) && !$0.contains("diarize") }
+            // "-diarize" needs another request format; "realtime" and "live" ones only stream over a socket.
+            speech = ids.filter { id in
+                (id.contains("transcribe") || id.contains("whisper"))
+                    && !["diarize", "realtime", "live"].contains { id.contains($0) }
+            }
         default:
             speech = ids
         }

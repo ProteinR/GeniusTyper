@@ -91,7 +91,7 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
   after a few idle minutes, so the model does not sit in memory.
 - **Cloud, optional**: Groq, OpenAI, OpenRouter or any OpenAI-compatible `/audio/transcriptions`
   service with your own key (stored in the Keychain). The models come from the provider's own list;
-  if the service fails, the local model takes over. (Anthropic's API has no speech-to-text.)
+  if the service fails, the local model takes over.
 - A small pill at the bottom of the screen with the microphone level (its scale adapts to the
   microphone and the room, and is remembered per microphone), ё restored in the text,
   history with search, kept forever or for 30 days / 90 days / a year, and statistics (words,

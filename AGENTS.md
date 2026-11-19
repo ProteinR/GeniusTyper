@@ -189,15 +189,21 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   Ukrainian letters (є, і), 6 `<unk>` against 1. Whisper transcripts are no reference (they
   hallucinate in silence, guess wrong languages, smooth speech). Cloud ones via
   the OpenAI-compatible `/audio/transcriptions` (0.22.0, asked 2026-11-19): a provider menu (Groq,
-  OpenAI, OpenRouter, "Другой сервис" with its own address; Anthropic shown greyed: its API has no
-  speech-to-text), the key opened by "Добавить ключ / Заменить" with "Отмена" and "Сохранить и
+  OpenAI, OpenRouter, "Другой сервис" with its own address; no Anthropic: its API has no speech-to-text, so the greyed
+  menu item of 0.22.0 was removed in 0.22.1 at the owner's request), the key opened by "Добавить ключ / Заменить" with "Отмена" and "Сохранить и
   проверить" (the old row expanded on choosing and closed only by "Готово", saving what was typed),
   the model from the provider's `/models` (`CloudModels`: Groq's whisper ones, OpenAI's
   transcribe/whisper ones without `-diarize`, OpenRouter asked with `output_modalities=transcription`,
   another service's whole list or a typed name; the recommended one first; kept in `models.<id>`).
   A cloud engine without a key, or one that fails, falls back to Ultra when it is on disk (the
-  history names the model that really ran). Keys in the login Keychain (`Keychain`). The owner has
-  not used a cloud engine yet.
+  history names the model that really ran). Keys in the login Keychain (`Keychain`). Tested
+  2026-11-19 with the owner's keys on a synthetic Russian phrase with English terms: OpenRouter's
+  `/audio/transcriptions` takes the same multipart request and lists 30 models (AssemblyAI,
+  ElevenLabs, Google, Mistral, xAI, Moondream's parakeet-ultra, OpenAI…); `openai/gpt-transcribe`
+  was the cleanest (recommended), Gemini, Grok and ElevenLabs close, Deepgram nova-3 heard English
+  without a language; OpenAI's key listed models but had no credits (429, now "нет денег на счёте
+  или лимит"), its `gpt-live-transcribe` / `gpt-realtime-whisper` are filtered out (socket only);
+  Anthropic has no `/audio/transcriptions` and its Messages take only PDF documents.
 - **The model runs in a helper process** `Contents/MacOS/GeniusTyperEngine` (`GeniusTyperEngine/main.swift`;
   only it links FluidAudio and SQLCipher; second argument `v3` or `ultra`; `senders` mode for
   Telegram). Genius Typer starts it when recording starts (the model loads in ~0.2 s
