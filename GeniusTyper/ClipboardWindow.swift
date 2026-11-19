@@ -23,10 +23,12 @@ enum ClipboardWindow {
     private static var monitor: Any?
     private static let model = ClipboardPanelModel()
 
-    static var isVisible: Bool { panel?.isVisible == true }
+    /// Open, not fading out (a closing panel is still visible for 0.1 s).
+    static var isVisible: Bool { panel?.isVisible == true && !closing }
+    private static var closing = false
 
     static func toggle() {
-        isVisible ? hide() : show()
+        isVisible ? dismiss() : show()
     }
 
     static func show() {
@@ -41,7 +43,11 @@ enum ClipboardWindow {
             origin.y = min(max(origin.y, visible.minY + 8), visible.maxY - height - 8)
         }
         panel.setFrame(NSRect(origin: origin, size: NSSize(width: width, height: height)), display: false)
+        closing = false
+        panel.ignoresMouseEvents = false
+        panel.contentView?.layer?.removeAnimation(forKey: "close")
         panel.makeKeyAndOrderFront(nil)
+        animateOpening(panel, from: NSPoint(x: mouse.x - origin.x, y: mouse.y - origin.y))
         if monitor == nil {
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 let key = Key(window: event.windowNumber, code: event.keyCode,
@@ -63,11 +69,90 @@ enum ClipboardWindow {
         model.close()
     }
 
+    /// Grows from the pointer (92 % → 100 %) while it fades in, 0.18 s; only a fade with Reduce
+    /// Motion (asked 2026-11-20, chosen from four in a preview). Nothing is redrawn: the content
+    /// layer, already drawn, gets a Core Animation opacity and transform, run by the render server
+    /// on the GPU. (Animating the window's `alphaValue` instead cost ~18 ms of CPU per opening: AppKit
+    /// steps it frame by frame.) The model values stay as they are, so nothing is left half done if
+    /// the animation is cut short.
+    private static func animateOpening(_ panel: NSPanel, from pointer: NSPoint) {
+        guard let layer = panel.contentView?.layer else { return }
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0
+        fade.toValue = 1
+        var animations: [CAAnimation] = [fade]
+        if !reduce {
+            // The scale is about the pointer; the transform works about the layer's anchor point.
+            let anchor = NSPoint(x: layer.anchorPoint.x * layer.bounds.width, y: layer.anchorPoint.y * layer.bounds.height)
+            let dx = min(max(pointer.x, 0), width) - anchor.x, dy = min(max(pointer.y, 0), height) - anchor.y
+            var start = CATransform3DMakeTranslation(dx, dy, 0)
+            start = CATransform3DScale(start, 0.92, 0.92, 1)
+            start = CATransform3DTranslate(start, -dx, -dy, 0)
+            let grow = CABasicAnimation(keyPath: "transform")
+            grow.fromValue = NSValue(caTransform3D: start)
+            grow.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+            animations.append(grow)
+        }
+        let group = CAAnimationGroup()
+        group.animations = animations
+        group.duration = reduce ? 0.12 : 0.18
+        group.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.2, 1)
+        // The window's shadow and edge are the WindowServer's, at full size from the first frame:
+        // they showed as a frame around the growing content. Off while it grows, back at the end.
+        panel.hasShadow = false
+        CATransaction.begin()
+        CATransaction.setCompletionBlock {
+            MainActor.assumeIsolated {
+                guard !closing, panel.isVisible else { return }
+                panel.hasShadow = true
+                panel.invalidateShadow()
+            }
+        }
+        layer.add(group, forKey: "open")
+        CATransaction.commit()
+    }
+
+    /// Esc, ⌘W, a click elsewhere, the shortcut again: fades out in 0.1 s (the content layer's
+    /// opacity, as on opening). Choosing an entry closes at once (`hide`): the ⌘V that pastes must
+    /// reach the app in front, not this panel.
+    static func dismiss() {
+        guard let panel, panel.isVisible, !closing else { return }
+        guard let layer = panel.contentView?.layer else { return hide() }
+        closing = true
+        model.close()
+        hidePreview()
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        panel.ignoresMouseEvents = true
+        panel.hasShadow = false
+        CATransaction.begin()
+        CATransaction.setCompletionBlock {
+            MainActor.assumeIsolated {
+                guard closing else { return }  // opened again meanwhile
+                hide()
+            }
+        }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = layer.presentation()?.opacity ?? 1
+        fade.toValue = 0
+        fade.duration = 0.1
+        fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
+        fade.fillMode = .forwards
+        fade.isRemovedOnCompletion = false
+        layer.add(fade, forKey: "close")
+        CATransaction.commit()
+    }
+
     static func hide() {
         model.close()
         hidePreview()
+        closing = false
         guard let panel, panel.isVisible else { return }
+        panel.ignoresMouseEvents = false
         panel.orderOut(nil)
+        panel.contentView?.layer?.removeAllAnimations()
+        panel.hasShadow = true
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         Memory.giveBackSoon()
@@ -136,12 +221,12 @@ enum ClipboardWindow {
         case 36, 76:  // ⏎
             model.useSelected(paste: !flags.contains(.option), plain: flags.contains(.shift))
             return true
-        case 53: hide(); return true  // Esc
+        case 53: dismiss(); return true  // Esc
         case 51 where flags.contains(.option):  // ⌥⌫
             model.deleteSelected()
             return true
         default:
-            if flags == .command, key.code == 12 || key.code == 13 { hide(); return true }  // ⌘Q, ⌘W
+            if flags == .command, key.code == 12 || key.code == 13 { dismiss(); return true }  // ⌘Q, ⌘W
             return false
         }
     }
@@ -159,7 +244,7 @@ enum ClipboardWindow {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.contentView = Background(content: NSHostingView(rootView: ClipboardListView().environmentObject(model)))
         NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: panel, queue: .main) { _ in
-            MainActor.assumeIsolated { hide() }  // a click elsewhere
+            MainActor.assumeIsolated { dismiss() }  // a click elsewhere
         }
         return panel
     }

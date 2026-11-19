@@ -123,7 +123,15 @@ used, and the app registers itself as a login item.
 - **Clipboard history** (replaces Maccy, 2026-10-19; `ClipboardStore.swift`, `ClipboardItem.swift`
   = pure rules, tested, `ClipboardWindow.swift`, `HotKey.swift`): ⇧⌘C (Carbon hot key, key code, works
   in any layout) opens a non-activating panel at the pointer: search (also in the wrong layout:
-  "ghbdtn" finds "привет"), list with app icons, preview beside it after 1.5 s. ⏎ pastes (⌘V posted
+  "ghbdtn" finds "привет"), list with app icons, preview beside it after 1.5 s. **Opening** (0.22.4, asked
+  2026-11-20, chosen from four in a preview): the window grows from the pointer, 92 % → 100 %,
+  while it fades in, 0.18 s, ease (0.2, 0.8, 0.2, 1); a fade only with Reduce Motion; Esc, ⌘W, a
+  click elsewhere and the shortcut again fade it out in 0.1 s (`dismiss`), choosing an entry closes
+  at once (`hide`: the ⌘V must reach the app in front). Core Animation on the content layer only
+  (render server, GPU, nothing redrawn): measured ~54 ms of CPU per open + close against ~60 ms
+  instant, while the window's `alphaValue` cost ~78 ms (AppKit steps it per frame). The window
+  shadow is off while it grows and back at the end: drawn by the WindowServer at full size, it
+  showed as a frame around the growing content. ⏎ pastes (⌘V posted
   to the app in front, needs Accessibility), ⌥⏎ copies only, ⇧⏎ without formatting, ⌥1…9 (⌘1…9
   until 0.22.0), ⌥⌫ deletes. **Tabs** "Буфер обмена | Диктовки" while dictation is on (0.22.0,
   asked 2026-11-19: with the icon hidden a dictation pasted nowhere could not be found): it always
