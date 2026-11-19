@@ -114,7 +114,7 @@ struct VoicesView: View {
         VStack(alignment: .leading, spacing: 8) {
             if titled {
                 HStack(spacing: 8) {
-                    Image(systemName: "waveform").foregroundStyle(.secondary)
+                    Image(systemName: "paperplane.fill").foregroundStyle(.cyan)
                     Text("Голосовые из Telegram").font(.headline)
                     Spacer()
                     Button(action: close) { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }

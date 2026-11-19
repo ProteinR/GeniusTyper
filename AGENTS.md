@@ -26,7 +26,7 @@ used, and the app registers itself as a login item.
 - **Left click** (`QuickPanel.swift`): a short menu-like panel under the icon, built on show and
   released on close. Rows only for parts that are on: "Голосовые из Telegram ›" (its column is
   open at once when the voices are on, so they start transcribing), "История диктовок ›" (column
-  on hover, 0.3 s, like a submenu), "История буфера ›" (`ClipboardSide`, asked 2026-10-28: the
+  on hover, 0.3 s, like a submenu), "Буфер обмена ›" (`ClipboardSide`; "История буфера" until 0.22.1, asked 2026-10-28: the
   30 newest entries, a snapshot taken on opening and on each search, so copying, which moves an
   entry to the top, does not reorder it; search as in the history window; text in 3 lines,
   images as thumbnails; a click copies with formatting, as ⌥⏎; "Вся история…" opens the settings' История → Буфер обмена;
@@ -46,7 +46,18 @@ used, and the app registers itself as a login item.
   Esc and the auto-fix stop; loginwindow sometimes keeps it after the screen was locked, cure:
   lock and unlock, 2026-10-26); "Нужны разрешения" when one is missing; "Настройки…", "Завершить". Icon hidden:
   the panel opens at the top right (reopening the app from Spotlight/Finder).
-- **Right click**: Исправлять текст, История буфера, История диктовок…, Настройки…, Завершить.
+- **Right click**: Исправлять текст, Буфер обмена (with its shortcut on the right), История диктовок…,
+  Настройки…, Проверить обновления…, Завершить.
+- **One look across the app** (0.22.2, asked 2026-11-20 after a mockup: the panel had stayed in the
+  old style): every part has one symbol and colour everywhere, `SettingsTile` in the settings'
+  sidebar and rows, `MenuIcon` (the same tile at 20 pt) in the left-click panel: Голосовые из
+  Telegram `paperplane.fill` cyan (also the ⌃⌥V window's header), История диктовок `clock.fill`
+  orange, Буфер обмена `doc.on.clipboard.fill` teal, Исправлять текст `keyboard.fill` blue,
+  Настройки `gearshape.fill` gray, Распознавание `bolt.fill` indigo; "Завершить" a plain glyph. One
+  name per part ("Буфер обмена", not "История буфера"). The version is only under the settings'
+  pages (with the GitHub link, as in MeetRec); the panel's last line is the dictation key alone.
+  Раскладка and Буфер обмена have the switch card, then rows with tiles (`TiledLabel`), no
+  sub-pages: they have 6 and 3 settings, Диктовка needed pages for ~20.
 - **Settings window** (`SettingsWindow.swift`, `SettingsPages.swift`, `Dictation/DictationPage.swift`;
   built on open, released on close): Основное (login, icon and the language on it, all
   permissions with their state), Раскладка, Буфер обмена, Диктовка, История (dictations),
@@ -126,7 +137,7 @@ used, and the app registers itself as a login item.
   (`index.json` with texts + one folder per entry). Measured against Maccy: `MACCY-BASELINE.md`.
   The shortcut is changeable in the panel ("Открывать": click, press a combination with ⌘/⌥/⌃;
   `KeyCombo`, stored as `clipboardHotKey`). As in Maccy, the gear at the bottom right of the
-  history opens the panel (its clipboard section), and "Открыть" next to "История буфера обмена" in
+  history opens the panel (its clipboard section), and "Открыть" next to "Открывать" in
   the panel opens the history. Maccy must not run at the same time: both take ⇧⌘C, the
   second registration does not fail and the app registered last gets it; the panel warns while
   Maccy is running.
@@ -496,5 +507,5 @@ Every fix or feature bumps the version (`project.yml`). The pre-commit hook
 (`scripts/git-hooks/pre-commit`; enable once per clone: `git config core.hooksPath scripts/git-hooks`)
 does it when a commit touches the app: `CURRENT_PROJECT_VERSION` +1 and the patch (0.1.0 → 0.1.1).
 For a new feature bump the minor by hand before committing (`MARKETING_VERSION: "0.2.0"`); the hook
-keeps a hand-made bump. The version is shown next to the title in the panel; the log's launch line
+keeps a hand-made bump. The version is shown under the settings' pages (no longer in the panel since 0.22.2); the log's launch line
 also has the build number.

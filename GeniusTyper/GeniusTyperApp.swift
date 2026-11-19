@@ -175,7 +175,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fixing.state = Observer.shared.paused ? .off : .on
         var items = [fixing, .separator()]
         if ClipboardStore.shared.enabled {
-            let history = NSMenuItem(title: "История буфера", action: #selector(showClipboard), keyEquivalent: "")
+            // Named as in ⇧⌘C and the settings; its shortcut shown on the right as in any menu
+            // (the last character of the combination's title: a letter or digit key).
+            let combo = ClipboardStore.shared.hotKey
+            let key = combo.title.last.map { String($0).lowercased() } ?? ""
+            let shows = key.count == 1 && key.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) }
+            let history = NSMenuItem(title: "Буфер обмена", action: #selector(showClipboard), keyEquivalent: shows ? key : "")
+            if shows { history.keyEquivalentModifierMask = combo.flags.intersection([.command, .shift, .option, .control]) }
             history.target = self
             items.append(history)
         }

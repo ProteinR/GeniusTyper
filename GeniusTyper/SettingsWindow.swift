@@ -193,6 +193,25 @@ struct SettingsTile: View {
     }
 }
 
+/// A setting's label with its tile: title and a line under it (Раскладка, Буфер обмена).
+struct TiledLabel: View {
+    let symbol: String
+    let tint: Color
+    let title: LocalizedStringKey
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            SettingsTile(symbol: symbol, tint: tint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
 /// A row in a settings form that opens its own page: tile, title, a one-line summary, chevron.
 /// `trailing` goes before the chevron (a switch).
 struct SettingsLinkRow<Trailing: View>: View {

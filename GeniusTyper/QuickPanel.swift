@@ -177,25 +177,25 @@ private struct QuickMenuView: View {
         VStack(alignment: .leading, spacing: 2) {
             UpdateBanner()
             if dictation && voices {
-                MenuRow(icon: "waveform", title: "Голосовые из Telegram",
+                MenuRow(icon: "paperplane.fill", tint: .cyan, title: "Голосовые из Telegram",
                         detail: HotkeyMonitor.shared.voicesShortcut.title, opens: true, selected: side == .voices) {
                     side = .voices
                 } hover: { side = .voices }
             }
             if dictation {
-                MenuRow(icon: "clock.arrow.circlepath", title: "История диктовок", opens: true, selected: side == .history) {
+                MenuRow(icon: "clock.fill", tint: .orange, title: "История диктовок", opens: true, selected: side == .history) {
                     side = .history
                 } hover: { side = .history }
             }
             if clipboard.enabled {
-                MenuRow(icon: "doc.on.clipboard", title: "История буфера", detail: clipboard.hotKey.title,
+                MenuRow(icon: "doc.on.clipboard.fill", tint: .teal, title: "Буфер обмена", detail: clipboard.hotKey.title,
                         opens: true, selected: side == .clipboard) {
                     side = .clipboard
                 } hover: { side = .clipboard }
             }
             if dictation || clipboard.enabled { Divider().padding(.vertical, 4) }
 
-            SwitchRow(icon: "keyboard", title: "Исправлять текст", isOn: Binding(
+            SwitchRow(icon: "keyboard.fill", tint: .blue, title: "Исправлять текст", isOn: Binding(
                 get: { !observer.paused }, set: { observer.paused = !$0 }))
                 .help("Раскладка и ё. Выключено — Caps Lock только переключает раскладку")
             if let app = observer.lastApp {
@@ -211,24 +211,26 @@ private struct QuickMenuView: View {
                 SecureInputRow(holder: secureInput)
             }
             if missingPermission {
-                MenuRow(icon: "exclamationmark.triangle.fill", title: "Нужны разрешения", tint: .orange) {
+                MenuRow(icon: "exclamationmark.triangle.fill", tint: .orange, title: "Нужны разрешения") {
                     close()
                     SettingsWindow.shared.show(page: .general)
                 } hover: { side = nil }
             }
-            MenuRow(icon: "gearshape", title: "Настройки…", detail: "⌘,") {
+            MenuRow(icon: "gearshape.fill", tint: .gray, title: "Настройки…", detail: "⌘,") {
                 close()
                 SettingsWindow.shared.show()
             } hover: { side = nil }
-            MenuRow(icon: "power", title: "Завершить Genius Typer", detail: "⌘Q") {
+            MenuRow(icon: "power", tile: false, title: "Завершить Genius Typer", detail: "⌘Q") {
                 NSApp.terminate(nil)
             } hover: { side = nil }
-            Text(dictation ? "Genius Typer \(AppDelegate.appVersion) · \(HotkeyMonitor.shared.shortcut.title) — диктовка"
-                           : "Genius Typer \(AppDelegate.appVersion)")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 8)
-                .padding(.top, 4)
+            // The version is in the settings, under the pages (as in MeetRec).
+            if dictation {
+                Text("\(HotkeyMonitor.shared.shortcut.title) — диктовка")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 4)
+            }
         }
         .padding(6)
         .frame(width: 280)
@@ -239,16 +241,18 @@ private struct QuickMenuView: View {
     }
 }
 
-/// One row of the menu: highlighted under the pointer like a menu item. Like a submenu, hovering
+/// One row of the menu: highlighted under the pointer like a menu item. The parts of the app have
+/// the coloured tile they have in the settings (`SettingsTile`, smaller); quitting a plain glyph. Like a submenu, hovering
 /// switches the side column only when the pointer stays on the row (passing over "История" on the
 /// way to the voices column does not open the history).
 private struct MenuRow: View {
     let icon: String
+    var tint: Color = .gray
+    var tile = true
     let title: String
     var detail: String?
     var opens = false
     var selected = false
-    var tint: Color?
     let action: () -> Void
     let hover: () -> Void
     @State private var hovered = false
@@ -256,14 +260,14 @@ private struct MenuRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: icon).frame(width: 16).foregroundStyle(tint ?? .primary)
+            HStack(alignment: .center, spacing: 8) {
+                MenuIcon(symbol: icon, tint: tile ? tint : nil)
                 Text(title).lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
                 if let detail { Text(detail).foregroundStyle(.secondary) }
                 if opens { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary) }
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(RoundedRectangle(cornerRadius: 6).fill(hovered || selected ? Color.primary.opacity(0.1) : .clear))
             .contentShape(Rectangle())
         }
@@ -280,6 +284,24 @@ private struct MenuRow: View {
     }
 }
 
+/// A row's icon in the panel: the settings' tile at 20 pt, or a plain glyph (no tint).
+private struct MenuIcon: View {
+    let symbol: String
+    let tint: Color?
+
+    var body: some View {
+        if let tint {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 20, height: 20)
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(tint.gradient))
+        } else {
+            Image(systemName: symbol).frame(width: 20)
+        }
+    }
+}
+
 /// Secure Input is on: the keys (Caps Lock, Esc, the auto-fix) are not seen. Not a button; the
 /// cure is in the text.
 private struct SecureInputRow: View {
@@ -287,7 +309,7 @@ private struct SecureInputRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: "lock.fill").frame(width: 16).foregroundStyle(.orange)
+            Image(systemName: "lock.fill").frame(width: 20).foregroundStyle(.orange)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Клавиши не видны: защищённый ввод")
                 Text(holder == "loginwindow"
@@ -308,13 +330,14 @@ private struct SecureInputRow: View {
 /// switch above).
 private struct SwitchRow: View {
     let icon: String?
+    var tint: Color = .gray
     let title: String
     @Binding var isOn: Bool
 
     var body: some View {
         Toggle(isOn: $isOn) {
             HStack(spacing: 8) {
-                if let icon { Image(systemName: icon).frame(width: 16) } else { Color.clear.frame(width: 16, height: 1) }
+                if let icon { MenuIcon(symbol: icon, tint: tint) } else { Color.clear.frame(width: 20, height: 1) }
                 Text(title).lineLimit(1).truncationMode(.middle)
             }
         }

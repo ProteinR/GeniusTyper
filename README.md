@@ -72,7 +72,7 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 - With dictation on, the window has a second tab, "Диктовки" (Tab, ⌘1 / ⌘2): the dictation history,
   so a dictation that went nowhere (no text field in focus) is one ⏎ away, even with the menu bar
   icon hidden.
-- The newest entries also sit in the menu bar icon's left-click menu: point at "История буфера" for
+- The newest entries also sit in the menu bar icon's left-click menu: point at "Буфер обмена" for
   the list with search; a click copies an entry, the one under the pointer shows its preview.
 - Settings → История has the whole clipboard history next to the dictations and the voice
   messages ("Вся история…" under each list of the left-click menu opens its tab), with the same

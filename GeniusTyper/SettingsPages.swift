@@ -95,29 +95,22 @@ struct TypingPage: View {
             }
             Section {
                 Toggle(isOn: $observer.autoFix) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Исправлять раскладку")
-                        Text("«ghbdtn» → «привет»: слово, набранное не в той раскладке, перепечатывается после пробела")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    TiledLabel(symbol: "character.cursor.ibeam", tint: .indigo, title: "Исправлять раскладку",
+                               detail: "«ghbdtn» → «привет»: слово, набранное не в той раскладке, перепечатывается после пробела")
                 }
                 Toggle(isOn: $observer.yoFix) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Ставить ё")
-                        Text("«еще» → «ещё», только где ё точно нужна (не в «все», «узнаем»)").font(.caption).foregroundStyle(.secondary)
-                    }
+                    TiledLabel(symbol: "textformat", tint: .green, title: "Ставить ё",
+                               detail: "«еще» → «ещё», только где ё точно нужна (не в «все», «узнаем»)")
                 }
                 LabeledContent {
                     Button("Изменить…") { ExceptionsEditor.show(.apps) }
                 } label: {
-                    Text("Не исправлять в приложениях")
-                    Text(appsSummary).font(.caption).foregroundStyle(.secondary)
+                    TiledLabel(symbol: "square.grid.2x2.fill", tint: .gray, title: "Не исправлять в приложениях", detail: appsSummary)
                 }
                 LabeledContent {
                     Button("Изменить…") { ExceptionsEditor.show(.words) }
                 } label: {
-                    Text("Слова-исключения")
-                    Text(wordsSummary).font(.caption).foregroundStyle(.secondary)
+                    TiledLabel(symbol: "text.badge.xmark", tint: .pink, title: "Слова-исключения", detail: wordsSummary)
                 }
             } footer: {
                 Text("**⇧ + пробел** — не исправлять это слово · **Caps Lock** сразу после исправления — отменить его")
@@ -127,13 +120,9 @@ struct TypingPage: View {
             .active(!observer.paused)
             Section {
                 Toggle(isOn: $observer.capsLockSwitching) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Переключать раскладку клавишей Caps Lock")
-                        Text("Одно нажатие — другой язык. Заглавные буквы — ⇧ + Caps Lock").font(.caption).foregroundStyle(.secondary)
-                    }
+                    TiledLabel(symbol: "capslock.fill", tint: .blue, title: "Переключать раскладку клавишей Caps Lock",
+                               detail: "Одно нажатие — другой язык. Заглавные буквы — ⇧ + Caps Lock. Работает, даже когда исправление выключено")
                 }
-            } header: {
-                Text("Caps Lock")
             } footer: {
                 if observer.capsLockSwitching {
                     Text("Посреди слова Caps Lock ещё и перепечатывает набранное в другой раскладке, дважды подряд — всю фразу. Это работает, пока включено «Исправлять текст».")
@@ -172,7 +161,7 @@ struct ClipboardPage: View {
     var body: some View {
         Form {
             Section {
-                ModuleSwitch(title: "История буфера обмена",
+                ModuleSwitch(title: "Буфер обмена",
                              detail: clipboard.enabled ? "Всё скопированное хранится на этом Mac; пароли и данные из менеджеров паролей — нет"
                                                        : "Выключено: скопированное не сохраняется",
                              isOn: $clipboard.enabled)
@@ -184,8 +173,8 @@ struct ClipboardPage: View {
                         Button("Открыть") { ClipboardWindow.show() }
                     }
                 } label: {
-                    Text("Открывать")
-                    Text("Сочетание работает в любой раскладке").font(.caption).foregroundStyle(.secondary)
+                    TiledLabel(symbol: "command", tint: .teal, title: "Открывать",
+                               detail: "Окно у курсора; сочетание работает в любой раскладке")
                 }
                 if maccyRunning {
                     Label("Запущен Maccy: он тоже открывается по ⇧⌘C и перехватывает это сочетание. Закройте его или выберите другое",
@@ -198,19 +187,9 @@ struct ClipboardPage: View {
                         .font(.caption).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                LabeledContent("Хранить до") {
-                    Menu {
-                        ForEach(ClipboardStore.limits, id: \.self) { limit in
-                            Button("\(limit) МБ") { clipboard.limitMB = limit }
-                        }
-                    } label: {
-                        Text("\(clipboard.limitMB) МБ")
-                    }
-                    .fixedSize()
-                }
-                ClipboardUsageRow(usage: clipboard.usage) { confirmClear = true }
+                ClipboardUsageRow(usage: clipboard.usage, clipboard: clipboard) { confirmClear = true }
             } footer: {
-                Text("В истории: ⏎ — вставить, ⌥⏎ — только скопировать, ⇧⏎ — без оформления, ⌘1…9, ⌥⌫ — удалить")
+                Text("В окне: **⏎** вставить · **⌥⏎** только скопировать · **⇧⏎** без оформления · **⌥1…9** · **⌥⌫** удалить · **Tab** — вкладка «Диктовки»")
                     .font(.caption).foregroundStyle(.secondary)
             }
             .active(clipboard.enabled)
@@ -273,18 +252,29 @@ private struct HotKeyRecorder: View {
 }
 
 /// "Записей: 70 · 1,5 МБ · Очистить…" (as under the history's list): the only part of the page that changes with every copy.
+/// How much the history may take and takes now, with "Очистить…".
 private struct ClipboardUsageRow: View {
     @ObservedObject var usage: ClipboardUsage
+    @ObservedObject var clipboard: ClipboardStore
     let clear: () -> Void
 
     var body: some View {
-        LabeledContent("Хранится") {
-            HStack(spacing: 8) {
-                Text("Записей: \(usage.value.count) · \(ByteCountFormatter.string(fromByteCount: Int64(usage.value.bytes), countStyle: .file))")
-                    .foregroundStyle(.secondary)
+        LabeledContent {
+            HStack(spacing: 6) {
+                Menu {
+                    ForEach(ClipboardStore.limits, id: \.self) { limit in
+                        Button("\(limit) МБ") { clipboard.limitMB = limit }
+                    }
+                } label: {
+                    Text("\(clipboard.limitMB) МБ")
+                }
+                .fixedSize()
                 Button("Очистить…", action: clear)
                     .disabled(usage.value.count == 0)
             }
+        } label: {
+            TiledLabel(symbol: "internaldrive.fill", tint: .gray, title: "Хранить до",
+                       detail: "Записей: \(usage.value.count) · \(ByteCountFormatter.string(fromByteCount: Int64(usage.value.bytes), countStyle: .file))")
         }
     }
 }
