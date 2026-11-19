@@ -1,0 +1,21 @@
+{
+  "sourceLanguage" : "ru",
+  "strings" : {
+    "Автор %@ на GitHub" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@'s author on GitHub" } }
+      }
+    },
+    "Вкл." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "On" } }
+      }
+    },
+    "Выкл." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Off" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

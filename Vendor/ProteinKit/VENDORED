@@ -1,0 +1,4 @@
+# Copied by ProteinKit's scripts/vendor.sh. Do not edit here: change ProteinKit itself,
+# commit, then run its scripts/vendor.sh with this repository.
+version: v0.1.0
+commit: 74bc41d

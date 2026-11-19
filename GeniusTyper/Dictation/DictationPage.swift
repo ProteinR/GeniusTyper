@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import ProteinKit
 
 /// The pages of Диктовка opened from its list.
 enum DictationSubpage: String {
@@ -51,7 +52,7 @@ struct DictationPage: View {
                 list
             }
         }
-        .toggleStyle(LightSwitchStyle())
+        .toggleStyle(LightSwitchStyle(spreads: true))
         .onAppear(perform: countStored)
         .onChange(of: keepDays) { countStored() }
         .onChange(of: dictationKeepDays) {

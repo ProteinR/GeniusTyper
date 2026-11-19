@@ -64,7 +64,7 @@ used, and the app registers itself as a login item.
   Статистика (Печать = the journal numbers, `TypingStatsView`; Диктовка = `DictationStatsView`).
   Sidebar (0.22.0, after MeetRec's redesign and an interactive mockup, asked 2026-11-19): each page
   a white symbol on a coloured tile (`SettingsTile`), under the list the version and a link to the
-  owner's GitHub (`Links.author`, github.com/ProteinR; may become the owner's landing page later).
+  owner's GitHub (ProteinKit's `AboutFooter` and `Links.author`; may become a landing page later).
   **Диктовка is a list, not one long form**: the switch, then rows (`SettingsLinkRow`: tile, title,
   one-line summary, chevron) Распознавание, Клавиша, Запись и вставка, Индикатор, История диктовок,
   each opening its own page (`DictationSubpage`, kept in `SettingsWindow.Navigation.dictationSub`;
@@ -76,7 +76,7 @@ used, and the app registers itself as a login item.
   sidebar had green dots for the parts that are on; removed 2026-10-29, the owner found them
   unclear. The model and its settings are inside
   Диктовка. "Переключать раскладку клавишей Caps Lock" is its own section in Раскладка and works
-  even while fixing is off. Switches are `LightSwitchStyle` (the system one took ~100 MB of
+  even while fixing is off. Switches are ProteinKit's `LightSwitchStyle(spreads: true)` (the system one took ~100 MB of
   graphics memory), menus are `Menu`, segments are `Segments`, no `TabView`.
 
 ## What it does now
@@ -500,6 +500,15 @@ every pull request. The certificate must never change (users' permissions are ti
 never commit or push either. The owner's own copy switched to releases on 2026-11-13 (one more
 round of granting the permissions); `install.sh` over it brings back the local certificate and the
 permissions have to be granted again.
+
+## ProteinKit (shared with MeetRec and the other own apps)
+
+`Vendor/ProteinKit` is a copy of the owner's local package `~/development/projects/ProteinKit`
+(pieces shared by the own apps, MeetRec's style; see that folder's `AGENTS.md`). Never edit the
+copy: change ProteinKit, commit there, then `../ProteinKit/scripts/vendor.sh .` here and commit;
+`../ProteinKit/scripts/vendor.sh --check .` tells a hand-edited copy. `project.yml` uses it as
+`path: Vendor/ProteinKit`, so GitHub Actions builds need nothing else. From it since 0.22.3:
+`LightSwitchStyle`, `AboutFooter`, `Links` (the app's own copies are gone).
 
 ## Versions
 

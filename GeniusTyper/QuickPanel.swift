@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ProteinKit
 
 /// What the menu bar icon's left click opens: a short menu-like panel under the icon. Only what is
 /// used daily: the dictation and clipboard histories and the Telegram voices (each a second column
@@ -162,7 +163,7 @@ private struct QuickMenuView: View {
             main
         }
         .fixedSize()
-        .toggleStyle(LightSwitchStyle())
+        .toggleStyle(LightSwitchStyle(spreads: true))
         .onAppear { side = initialSide }
         // The update banner grows or goes (downloading, an error, skipped) while the panel is open.
         .onReceive(Updater.shared.$state.dropFirst()) { _ in DispatchQueue.main.async(execute: resized) }

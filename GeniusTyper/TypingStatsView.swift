@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ProteinKit
 
 /// Статистика → Печать: numbers from the journal, the last fixes (from memory) and the journal
 /// itself (it is for analysing the detector).
@@ -44,7 +45,7 @@ struct TypingStatsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .toggleStyle(LightSwitchStyle())
+        .toggleStyle(LightSwitchStyle(spreads: true))
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .alert("Удалить весь журнал (и слова)?", isPresented: $confirmDelete) {

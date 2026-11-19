@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import ProteinKit
 
 /// Основное: login, the menu bar icon, and every permission the app needs in one place.
 struct GeneralPage: View {
@@ -64,7 +65,7 @@ struct GeneralPage: View {
             UpdateSettings()
         }
         .formStyle(.grouped)
-        .toggleStyle(LightSwitchStyle())
+        .toggleStyle(LightSwitchStyle(spreads: true))
         .onAppear(perform: refresh)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
     }
@@ -132,7 +133,7 @@ struct TypingPage: View {
             }
         }
         .formStyle(.grouped)
-        .toggleStyle(LightSwitchStyle())
+        .toggleStyle(LightSwitchStyle(spreads: true))
     }
 
     private var appsSummary: String {
@@ -195,7 +196,7 @@ struct ClipboardPage: View {
             .active(clipboard.enabled)
         }
         .formStyle(.grouped)
-        .toggleStyle(LightSwitchStyle())
+        .toggleStyle(LightSwitchStyle(spreads: true))
         .alert("Очистить историю буфера?", isPresented: $confirmClear) {
             Button("Очистить", role: .destructive) { clipboard.clear() }
             Button("Отмена", role: .cancel) {}

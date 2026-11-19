@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ProteinKit
 
 enum SettingsPage: String, CaseIterable, Identifiable {
     case general, typing, clipboard, dictation, history, statistics
@@ -38,11 +39,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .statistics: return .purple
         }
     }
-}
-
-/// The owner's page, under the version in the sidebar.
-enum Links {
-    static let author = URL(string: "https://github.com/ProteinR")!
 }
 
 /// The settings window: everything that is not used daily (the left-click panel has that). Pages
@@ -146,18 +142,9 @@ struct SettingsView: View {
                 }
                 Spacer()
                 Divider().padding(.horizontal, 6)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Genius Typer \(AppDelegate.appVersion)")
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                    Link(destination: Links.author) {
-                        Label("github.com/ProteinR", systemImage: "arrow.up.right.square")
-                    }
-                    .help("Автор: Дмитрий Мемрук")
-                }
-                .font(.caption)
-                .padding(.horizontal, 6)
-                .padding(.top, 6)
+                AboutFooter(appName: "Genius Typer", axis: .vertical)
+                    .padding(.horizontal, 6)
+                    .padding(.top, 6)
             }
             .padding(10)
             .frame(width: 200)
