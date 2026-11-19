@@ -30,7 +30,7 @@ final class Dictation: ObservableObject {
         if on {
             start()
             let store = EngineStore.shared
-            if store.selected.isLocal, store.local == .missing { store.downloadLocal(store.selected) }
+            if !store.usesCloud, store.local == .missing { store.downloadLocal(.parakeetUltra) }
             if AudioRecorder.permission == .notDetermined { Task { _ = await AudioRecorder.requestPermission() } }
         } else {
             cancel(reason: "dictation off")
@@ -143,11 +143,10 @@ final class Dictation: ObservableObject {
         phase = .transcribing
         Indicator.shared.show(.transcribing)
         let target = targetApp
-        let model = EngineStore.shared.currentModelName
         job = Task {
             let start = Date()
             do {
-                let raw = try await EngineStore.shared.transcribe(samples)
+                let (raw, model) = try await EngineStore.shared.transcribe(samples)
                 guard !Task.isCancelled else { return }
                 let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 let text = Prefs.dictationYo ? Yoficator.shared.restoreText(trimmed) : trimmed

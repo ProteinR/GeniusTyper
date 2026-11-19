@@ -10,6 +10,7 @@ struct HistoryEntry: Identifiable, Equatable {
     let duration: TimeInterval
     let appName: String
     let model: String
+    var appBundle = ""
 }
 
 /// Totals for the statistics page.
@@ -92,7 +93,7 @@ final class History {
         var result: [HistoryEntry] = []
         withDB { db in
             let filter = search.isEmpty ? "" : "WHERE instr(lower_ru(text), ?) > 0"
-            let statement = prepare(db, "SELECT id, date, text, words, duration, app_name, model FROM dictations \(filter) ORDER BY date DESC LIMIT ? OFFSET ?")
+            let statement = prepare(db, "SELECT id, date, text, words, duration, app_name, model, app_bundle FROM dictations \(filter) ORDER BY date DESC LIMIT ? OFFSET ?")
             defer { sqlite3_finalize(statement) }
             var index: Int32 = 1
             if !search.isEmpty { bind(statement, index, search.lowercased()); index += 1 }
@@ -103,7 +104,7 @@ final class History {
                                         date: Date(timeIntervalSince1970: sqlite3_column_double(statement, 1)),
                                         text: string(statement, 2), words: Int(sqlite3_column_int64(statement, 3)),
                                         duration: sqlite3_column_double(statement, 4), appName: string(statement, 5),
-                                        model: string(statement, 6)))
+                                        model: string(statement, 6), appBundle: string(statement, 7)))
             }
         }
         return result

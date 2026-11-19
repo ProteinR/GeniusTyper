@@ -51,6 +51,15 @@ used, and the app registers itself as a login item.
   built on open, released on close): Основное (login, icon and the language on it, all
   permissions with their state), Раскладка, Буфер обмена, Диктовка, История (dictations),
   Статистика (Печать = the journal numbers, `TypingStatsView`; Диктовка = `DictationStatsView`).
+  Sidebar (0.22.0, after MeetRec's redesign and an interactive mockup, asked 2026-11-19): each page
+  a white symbol on a coloured tile (`SettingsTile`), under the list the version and a link to the
+  owner's GitHub (`Links.author`, github.com/ProteinR; may become the owner's landing page later).
+  **Диктовка is a list, not one long form**: the switch, then rows (`SettingsLinkRow`: tile, title,
+  one-line summary, chevron) Распознавание, Клавиша, Запись и вставка, Индикатор, История диктовок,
+  each opening its own page (`DictationSubpage`, kept in `SettingsWindow.Navigation.dictationSub`;
+  "‹ Диктовка" or Esc goes back, `SubpageHeader`), so nothing unfolds in place. "Голосовые из
+  Telegram" is one row with its switch; its page opens only while the voices are on (asked: the
+  options took room while off).
   **The rule**: Раскладка, Буфер обмена and Диктовка each start with their own switch
   (`ModuleSwitch`), everything under it is grey and inactive while it is off (`.active(_:)`). The
   sidebar had green dots for the parts that are on; removed 2026-10-29, the owner found them
@@ -104,8 +113,13 @@ used, and the app registers itself as a login item.
   = pure rules, tested, `ClipboardWindow.swift`, `HotKey.swift`): ⇧⌘C (Carbon hot key, key code, works
   in any layout) opens a non-activating panel at the pointer: search (also in the wrong layout:
   "ghbdtn" finds "привет"), list with app icons, preview beside it after 1.5 s. ⏎ pastes (⌘V posted
-  to the app in front, needs Accessibility), ⌥⏎ copies only, ⇧⏎ without formatting, ⌘1…9, ⌥⌫
-  deletes. Polls `changeCount` every 0.5 s. Keeps text (+ RTF/HTML), images (TIFF saved as PNG) and
+  to the app in front, needs Accessibility), ⌥⏎ copies only, ⇧⏎ without formatting, ⌥1…9 (⌘1…9
+  until 0.22.0), ⌥⌫ deletes. **Tabs** "Буфер обмена | Диктовки" while dictation is on (0.22.0,
+  asked 2026-11-19: with the icon hidden a dictation pasted nowhere could not be found): it always
+  opens on the clipboard; Tab, ⌘1 / ⌘2 switch; the dictations tab shows the newest 500 of the
+  history (read on switching, made into text `ClipboardItem`s with the row's app bundle, so search
+  and preview are the clipboard's), ⏎ pastes through `Paster` (transient, the clipboard given back),
+  ⌥⌫ deletes from the history, the gear opens Диктовка → История диктовок. Polls `changeCount` every 0.5 s. Keeps text (+ RTF/HTML), images (TIFF saved as PNG) and
   files, same content moves to the top; limit in MB (panel: 50/100/200/500, default 100) plus 1000
   entries. Skips password managers, "Не следить в" apps, nspasteboard.org private/transient types
   and seed phrases (Maccy's regex). Stored in `~/Library/Application Support/GeniusTyper/clipboard/`
@@ -159,12 +173,14 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   started again on `AVAudioEngineConfigurationChange` and when no buffer came for 0.7 s (at most
   5 times; log "Microphone restarted", "First sound … after"): AirPods switching to their headset
   mode stopped it silently, and 51 dictations held for seconds recorded 0 s (2026-11-02).
-- **Engines**: local **Parakeet Ultra** (default since 0.18.0, `parakeetUltra`; Moondream's
+- **Engines** (Диктовка → Распознавание, `RecognitionPage.swift`: "На этом Mac | Через интернет"):
+  local **Parakeet Ultra** (`parakeetUltra`; Moondream's
   post-trained v3, same architecture and speed, int8 encoder, ~630 MB, folder
-  `FluidAudio/Models/parakeet-ultra`) or **Parakeet TDT 0.6B v3** (NVIDIA, `parakeetV3`, ~470 MB)
-  (FluidAudio 0.17.7, CoreML on the Neural Engine, 25 European languages with automatic detection;
-  RU/EN is what matters). Each local model is a row in Диктовка with its own download/delete;
-  choosing one not on disk downloads it; switching restarts the helper (`serve ultra|v3`). Chosen
+  `FluidAudio/Models/parakeet-ultra`; FluidAudio 0.17.7, CoreML on the Neural Engine, 25 European
+  languages with automatic detection; RU/EN is what matters). **Parakeet TDT 0.6B v3** was removed
+  from the choice in 0.22.0 (the owner: Ultra is better everywhere): a stored `parakeetV3` becomes
+  Ultra (downloaded if missing), an old v3 folder gets a "Удалить" row; the helper still accepts
+  `v3` but the app always passes `ultra`. Ultra chosen
   on 2026-10-28 after a comparison on the owner's meetings and an English lesson (2 h 15 min, 482
   chunks ≤25 s): same speed (61 vs 65 s) and helper memory; where they differed (21 % of words)
   Whisper turbo sided with Ultra 216 times, with v3 71; Ultra much better on the owner's accented
@@ -172,9 +188,16 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   Russian (English terms in Latin: "editable", "Inventory List"), fewer uh/um; its slips: rare
   Ukrainian letters (є, і), 6 `<unk>` against 1. Whisper transcripts are no reference (they
   hallucinate in silence, guess wrong languages, smooth speech). Cloud ones via
-  the OpenAI-compatible `/audio/transcriptions` (Groq `whisper-large-v3-turbo`, OpenAI
-  `gpt-4o-transcribe`, "Другой сервис" with its own address); keys in the login Keychain
-  (`Keychain`). Not used yet beyond the code; the owner may want Groq/OpenAI later.
+  the OpenAI-compatible `/audio/transcriptions` (0.22.0, asked 2026-11-19): a provider menu (Groq,
+  OpenAI, OpenRouter, "Другой сервис" with its own address; Anthropic shown greyed: its API has no
+  speech-to-text), the key opened by "Добавить ключ / Заменить" with "Отмена" and "Сохранить и
+  проверить" (the old row expanded on choosing and closed only by "Готово", saving what was typed),
+  the model from the provider's `/models` (`CloudModels`: Groq's whisper ones, OpenAI's
+  transcribe/whisper ones without `-diarize`, OpenRouter asked with `output_modalities=transcription`,
+  another service's whole list or a typed name; the recommended one first; kept in `models.<id>`).
+  A cloud engine without a key, or one that fails, falls back to Ultra when it is on disk (the
+  history names the model that really ran). Keys in the login Keychain (`Keychain`). The owner has
+  not used a cloud engine yet.
 - **The model runs in a helper process** `Contents/MacOS/GeniusTyperEngine` (`GeniusTyperEngine/main.swift`;
   only it links FluidAudio and SQLCipher; second argument `v3` or `ultra`; `senders` mode for
   Telegram). Genius Typer starts it when recording starts (the model loads in ~0.2 s
@@ -413,7 +436,7 @@ Both delete `build/` when done (~300 MB of intermediates and caches); `KEEP_BUIL
 iterating. **When finished, leave no extra copies or caches behind**: only
 `~/Applications/Genius Typer.app` (`mdfind "kMDItemCFBundleIdentifier == 'com.dmemruk.GeniusTyper'"`
 shows one result), no `build/`, no DerivedData, and delete test screenshots (they show the clipboard).
-Launch arguments for screenshots: `--open-settings [general|typing|clipboard|dictation|history|statistics]`,
+Launch arguments for screenshots: `--open-settings [general|typing|clipboard|dictation|history|statistics] [recognition|key|recording|indicator|history|voices]`,
 `--menu [voices|history|clipboard]` (a running instance ignores them: quit it first).
 
 ## Menu bar icon

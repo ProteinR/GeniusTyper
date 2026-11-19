@@ -351,7 +351,7 @@ final class VoiceTranscripts: ObservableObject {
                         try AudioRecorder.samples(fromFile: file.url)
                     }.value
                     let start = Date()
-                    let text = try await EngineStore.shared.transcribe(samples).trimmingCharacters(in: .whitespacesAndNewlines)
+                    let text = try await EngineStore.shared.transcribe(samples).text.trimmingCharacters(in: .whitespacesAndNewlines)
                     Log.info(String(format: "Telegram voice %.0f s transcribed in %.2f s", file.duration, Date().timeIntervalSince(start)), "voices")
                     remember(text, for: file)
                     result = .done(text)

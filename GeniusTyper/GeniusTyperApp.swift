@@ -87,10 +87,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if arguments.contains("--stress-test") { runStressTest() }
         if arguments.contains("--dictation-stress-test") { runDictationStressTest() }
         if arguments.contains("--indicator-test") { runIndicatorTest() }
-        // `--open-settings [general|typing|clipboard|dictation|history|statistics]`: for screenshots.
+        // `--open-settings [general|typing|clipboard|dictation|history|statistics] [recognition|key|…]`:
+        // for screenshots; the second word opens a page of Диктовка.
         if let index = arguments.firstIndex(of: "--open-settings") {
             let page = arguments.dropFirst(index + 1).first.flatMap(SettingsPage.init(rawValue:))
-            SettingsWindow.shared.show(page: page)
+            let sub = arguments.dropFirst(index + 2).first.flatMap(DictationSubpage.init(rawValue:))
+            SettingsWindow.shared.show(page: page, dictation: sub)
         }
         // `--menu [voices|history|clipboard]`: the left-click panel, optionally with a side column open.
         if let index = arguments.firstIndex(of: "--menu") {

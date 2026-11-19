@@ -50,9 +50,11 @@ defaults write com.dmemruk.GeniusTyper autoOffApps -array-add com.sublimetext.4
 |---|---|---|---|
 | `dictationEnabled` | bool | `false` | The Диктовка switch: off = no key watched, no microphone, no model. |
 | `dictationShortcut` | data (JSON) | right ⌥ | `{"keyCode": 61, "modifiers": 0}`; `modifiers` 0 = a modifier key alone. |
-| `engine` | string | `parakeetUltra` | `parakeetUltra`, `parakeetV3` (local), `groq`, `openAI`, `custom`. |
+| `engine` | string | `parakeetUltra` | `parakeetUltra` (local), `groq`, `openAI`, `openRouter`, `custom`. A stored `parakeetV3` (before 0.22.0) becomes `parakeetUltra`. A cloud engine without a key, or one that fails, uses `parakeetUltra` when it is on disk. |
+| `cloudProvider` | string | `groq` | The provider "Через интернет" shows, kept while the local model is used. |
 | `baseURL.<engine>` | string | the service's | Address of an OpenAI-compatible API (`baseURL.custom` for "Другой сервис"). |
-| `model.<engine>` | string | the service's | Model name, e.g. `model.groq` = `whisper-large-v3-turbo`. |
+| `model.<engine>` | string | the service's | Model name, e.g. `model.groq` = `whisper-large-v3-turbo`; chosen from the provider's list. |
+| `models.<engine>` | array | — | The provider's speech models as its `/models` last listed them (filled after a key is saved). |
 | `unloadAfterMinutes` | int | `5` | The local model leaves memory after this many idle minutes; `0` = never. |
 | `dictationYo` | bool | `true` | ё in dictated text. |
 | `dictationSounds` | bool | `true` | Start and done sounds. |
@@ -67,7 +69,7 @@ defaults write com.dmemruk.GeniusTyper autoOffApps -array-add com.sublimetext.4
 | `voicesKeepDays` | int | `7` | Voice message texts are kept this many days (1 / 3 / 7 / 30; 0 = forever, new voice messages of the last 7 days are then transcribed on opening). |
 
 API keys are not in the defaults: they are in the login Keychain, service `com.dmemruk.GeniusTyper`,
-account = the engine (`groq`, `openAI`, `custom`).
+account = the engine (`groq`, `openAI`, `openRouter`, `custom`).
 
 ## Menu bar icon (Основное)
 

@@ -34,13 +34,13 @@ extension AppDelegate {
                 }
             }
             @MainActor func model() {
-                guard ParakeetEngine.isDownloaded(EngineStore.shared.selected) else {
+                guard ParakeetEngine.isDownloaded(.parakeetUltra) else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 3) { MainActor.assumeIsolated { round() } }
                     return
                 }
                 Task { @MainActor in
                     let start = Date()
-                    let text = (try? await EngineStore.shared.transcribe([Float](repeating: 0, count: 16_000 * 5))) ?? "error"
+                    let text = (try? await EngineStore.shared.transcribe([Float](repeating: 0, count: 16_000 * 5)))?.text ?? "error"
                     let helper = await EngineStore.shared.parakeet.helperFootprintMB ?? 0
                     Log.info(String(format: "Stress round %d: model loaded and ran in %.2f s (\"%@\"), footprint %@ MB + helper %.1f MB", cycle,
                                     Date().timeIntervalSince(start), text, Self.footprintMB(), helper), "stress")
@@ -127,7 +127,7 @@ extension AppDelegate {
                 Log.info("Transcribe file: \(path), \(samples.count / 16_000) s, footprint \(Self.footprintMB()) MB", "test")
                 for run in 1...2 {
                     let start = Date()
-                    let text = try await EngineStore.shared.transcribe(samples)
+                    let text = try await EngineStore.shared.transcribe(samples).text
                     let helper = await EngineStore.shared.parakeet.helperFootprintMB ?? 0
                     Log.info(String(format: "Transcribe file run %d: %.2f s, footprint %@ MB + helper %.1f MB: %@", run,
                                     Date().timeIntervalSince(start), Self.footprintMB(), helper, text), "test")

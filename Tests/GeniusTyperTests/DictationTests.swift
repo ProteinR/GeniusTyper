@@ -125,6 +125,7 @@ final class HistoryTests: XCTestCase {
         let page = history.page(offset: 0, limit: 10)
         XCTAssertEqual(page.map(\.text), ["Вторая ЗАПИСЬ про Ёлку", "Первая запись"])
         XCTAssertEqual(page.first?.words, 4)
+        XCTAssertEqual(page.first?.appBundle, "b")
         // Case-insensitive for Cyrillic.
         XCTAssertEqual(history.page(search: "запись", offset: 0, limit: 10).count, 2)
         XCTAssertEqual(history.page(search: "ёлку", offset: 0, limit: 10).count, 1)
@@ -522,5 +523,21 @@ final class TelegramPostboxTests: XCTestCase {
         // Stored before 0.19.0: no sender.
         let old = VoiceText(path: "/a", date: day, duration: 3, text: "привет", added: day)
         XCTAssertNil(VoiceText.decode(try JSONEncoder().encode([old]))[0].sender)
+    }
+}
+
+final class CloudModelsTests: XCTestCase {
+    func testOnlySpeechModelsRecommendedFirst() {
+        let groq = ["llama-3.3-70b-versatile", "whisper-large-v3", "whisper-large-v3-turbo", "playai-tts"]
+        XCTAssertEqual(CloudModels.speechModels(groq, for: .groq), ["whisper-large-v3-turbo", "whisper-large-v3"])
+        let openAI = ["gpt-5", "whisper-1", "gpt-4o-mini-transcribe", "gpt-4o-transcribe", "gpt-4o-transcribe-diarize", "tts-1", "gpt-4o-mini-transcribe"]
+        XCTAssertEqual(CloudModels.speechModels(openAI, for: .openAI), ["gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"])
+        // OpenRouter is asked for transcription models only; another service's list is taken as it is.
+        XCTAssertEqual(CloudModels.speechModels(["b", "a"], for: .custom), ["a", "b"])
+    }
+
+    func testOldV3ChoiceIsGone() {
+        XCTAssertNil(EngineID(rawValue: "parakeetV3"))
+        XCTAssertEqual(EngineID.local, [.parakeetUltra])
     }
 }

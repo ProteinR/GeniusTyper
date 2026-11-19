@@ -2,14 +2,16 @@ import Darwin
 import Foundation
 import Security
 
-/// Speech-to-text engines. Local ones (Parakeet on the Neural Engine: NVIDIA's v3 and Moondream's
-/// Ultra, a post-trained v3) and cloud ones through the OpenAI-compatible `/audio/transcriptions`
-/// API (Groq, OpenAI, any compatible service).
+/// Speech-to-text engines. The local one (Parakeet Ultra, Moondream's post-trained NVIDIA v3, on
+/// the Neural Engine) and cloud ones through the OpenAI-compatible `/audio/transcriptions` API
+/// (Groq, OpenAI, OpenRouter, any compatible service). Parakeet TDT v3 was dropped in 0.22.0: Ultra
+/// is as fast and better everywhere it was compared (2026-10-28); a stored `parakeetV3` becomes Ultra.
 enum EngineID: String, CaseIterable, Identifiable {
-    case parakeetUltra, parakeetV3, groq, openAI, custom
+    case parakeetUltra, groq, openAI, openRouter, custom
     var id: String { rawValue }
 
-    static let local: [EngineID] = [.parakeetUltra, .parakeetV3]
+    static let local: [EngineID] = [.parakeetUltra]
+    static let cloud: [EngineID] = [.groq, .openAI, .openRouter, .custom]
 
     var isLocal: Bool { Self.local.contains(self) }
 
@@ -17,18 +19,24 @@ enum EngineID: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .parakeetUltra: return "Parakeet Ultra"
-        case .parakeetV3: return "Parakeet TDT 0.6B v3"
         case .groq: return "Groq"
         case .openAI: return "OpenAI"
+        case .openRouter: return "OpenRouter"
         case .custom: return String(localized: "Другой сервис")
         }
     }
 
     /// Short name for the history and statistics.
-    var shortTitle: String {
+    var shortTitle: String { title }
+
+    /// One line under the provider in the settings.
+    var note: String {
         switch self {
-        case .parakeetV3: return "Parakeet v3"
-        default: return title
+        case .parakeetUltra: return String(localized: "На этом Mac, звук никуда не уходит")
+        case .groq: return String(localized: "Быстрее всех, есть бесплатный лимит")
+        case .openAI: return String(localized: "Модели GPT-4o для речи")
+        case .openRouter: return String(localized: "Много моделей по одному ключу")
+        case .custom: return String(localized: "Любой сервис, совместимый с OpenAI, по своему адресу")
         }
     }
 
@@ -36,23 +44,36 @@ enum EngineID: String, CaseIterable, Identifiable {
         switch self {
         case .groq: return "https://api.groq.com/openai/v1"
         case .openAI: return "https://api.openai.com/v1"
-        case .parakeetUltra, .parakeetV3, .custom: return ""
+        case .openRouter: return "https://openrouter.ai/api/v1"
+        case .parakeetUltra, .custom: return ""
         }
     }
 
+    /// Picked when the provider's list of models arrives and nothing was chosen yet.
     var defaultModel: String {
         switch self {
         case .groq: return "whisper-large-v3-turbo"
         case .openAI: return "gpt-4o-transcribe"
-        case .parakeetUltra, .parakeetV3, .custom: return ""
+        case .openRouter: return "openai/whisper-large-v3"
+        case .parakeetUltra, .custom: return ""
+        }
+    }
+
+    /// Where the user gets a key.
+    var keyPage: URL? {
+        switch self {
+        case .groq: return URL(string: "https://console.groq.com/keys")
+        case .openAI: return URL(string: "https://platform.openai.com/api-keys")
+        case .openRouter: return URL(string: "https://openrouter.ai/keys")
+        case .parakeetUltra, .custom: return nil
         }
     }
 
     /// The local model's name for GeniusTyperEngine (its second argument).
-    var helperModel: String { self == .parakeetUltra ? "ultra" : "v3" }
+    var helperModel: String { "ultra" }
 }
 
-/// A local Parakeet model (v3 or Ultra), run by the GeniusTyperEngine helper (FluidAudio, Neural Engine). The helper is
+/// The local Parakeet model, run by the GeniusTyperEngine helper (FluidAudio, Neural Engine). The helper is
 /// started when recording starts (the model loads while the user speaks) and stopped after a pause
 /// (`EngineStore`): loading the model leaves ~30 MB of fragmented memory that a running process
 /// never gives back to macOS, so it is a separate process that exits with the model.
@@ -64,11 +85,17 @@ actor ParakeetEngine {
     /// The model the running helper has loaded.
     private var model: EngineID?
 
-    /// FluidAudio's model folder (`AsrModels.defaultCacheDirectory(for: .v3 / .ultra)`).
+    /// FluidAudio's model folder (`AsrModels.defaultCacheDirectory(for: .ultra)`).
     static func directory(_ model: EngineID) -> URL {
+        modelsFolder.appendingPathComponent("parakeet-ultra", isDirectory: true)
+    }
+
+    /// Parakeet TDT v3 downloaded by a version before 0.22.0 (~470 MB): the settings offer to delete it.
+    static let legacyV3Directory = modelsFolder.appendingPathComponent("parakeet-tdt-0.6b-v3", isDirectory: true)
+
+    private static var modelsFolder: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(model == .parakeetUltra ? "FluidAudio/Models/parakeet-ultra" : "FluidAudio/Models/parakeet-tdt-0.6b-v3",
-                                    isDirectory: true)
+            .appendingPathComponent("FluidAudio/Models", isDirectory: true)
     }
 
     static func isDownloaded(_ model: EngineID) -> Bool {
@@ -89,7 +116,7 @@ actor ParakeetEngine {
         return result == 0 ? Double(info.ri_phys_footprint) / 1_048_576 : nil
     }
 
-    /// Downloads the model (v3 ~470 MB, Ultra ~630 MB) from Hugging Face into FluidAudio's folder.
+    /// Downloads the model (~630 MB) from Hugging Face into FluidAudio's folder.
     static func download(_ model: EngineID, progress: @escaping @Sendable (Double) -> Void) async throws {
         let (process, _, reader) = try launch("download", model)
         defer { if process.isRunning { process.terminate() } }
@@ -251,6 +278,49 @@ struct CloudEngine {
             throw EngineError(String(localized: "Сервис ответил ошибкой \(status)"))
         }
         return text
+    }
+}
+
+/// The provider's speech-to-text models, for the menu in the settings (and a check that the key works).
+enum CloudModels {
+    static func fetch(_ id: EngineID, baseURL: String, key: String) async throws -> [String] {
+        let base = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        // OpenRouter lists only its transcription models when asked; the others list everything.
+        let path = id == .openRouter ? "/models?output_modalities=transcription" : "/models"
+        guard let url = URL(string: base + path), url.scheme?.hasPrefix("http") == true else {
+            throw EngineError(String(localized: "Неверный адрес сервиса"))
+        }
+        var request = URLRequest(url: url, timeoutInterval: 20)
+        if !key.isEmpty { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        guard (200..<300).contains(status) else {
+            Log.error("\(id.rawValue) models HTTP \(status)", "engine")
+            throw EngineError(status == 401 || status == 403 ? String(localized: "Ключ не подошёл")
+                                                              : String(localized: "Сервис ответил ошибкой \(status)"))
+        }
+        let ids = (json?["data"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
+        return speechModels(ids, for: id)
+    }
+
+    /// Only the models that turn speech into text, the recommended one first. Groq and OpenAI list
+    /// their chat, image and voice models too.
+    static func speechModels(_ ids: [String], for id: EngineID) -> [String] {
+        let speech: [String]
+        switch id {
+        case .groq:
+            speech = ids.filter { $0.contains("whisper") }
+        case .openAI:
+            // "-diarize" needs another request format.
+            speech = ids.filter { ($0.contains("transcribe") || $0.contains("whisper")) && !$0.contains("diarize") }
+        default:
+            speech = ids
+        }
+        return Array(Set(speech)).sorted { a, b in
+            if a == id.defaultModel || b == id.defaultModel { return a == id.defaultModel }
+            return a < b
+        }
     }
 }
 

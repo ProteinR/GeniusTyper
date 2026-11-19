@@ -68,7 +68,10 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 ### Clipboard history
 
 - ⇧⌘C (changeable) opens the history at the pointer: search (also typed in the wrong layout),
-  app icons, preview, ⏎ pastes, ⇧⏎ pastes without formatting, ⌘1…9.
+  app icons, preview, ⏎ pastes, ⇧⏎ pastes without formatting, ⌥1…9.
+- With dictation on, the window has a second tab, "Диктовки" (Tab, ⌘1 / ⌘2): the dictation history,
+  so a dictation that went nowhere (no text field in focus) is one ⏎ away, even with the menu bar
+  icon hidden.
 - The newest entries also sit in the menu bar icon's left-click menu: point at "История буфера" for
   the list with search; a click copies an entry, the one under the pointer shows its preview.
 - Settings → История has the whole clipboard history next to the dictations and the voice
@@ -80,14 +83,15 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 ### Dictation (Diktant)
 
 - **Right ⌥** (changeable): hold to talk, or tap to start and tap again to stop. Esc cancels.
-- **Local**: Parakeet Ultra (Moondream's post-trained NVIDIA Parakeet TDT 0.6B v3, the default) or
-  Parakeet v3 itself (25 European languages, automatic detection) via
-  [FluidAudio](https://github.com/FluidInference/FluidAudio) on the Neural Engine. Ultra is as fast
-  and noticeably more accurate (on the author's meetings and an English lesson: Whisper sided with
-  Ultra 216 times and with v3 71 times where the two differed), at ~630 MB on disk instead of ~470 MB. It runs in a helper
-  process that exits after a few idle minutes, so the model does not sit in memory.
-- **Cloud, optional**: Groq, OpenAI or any OpenAI-compatible `/audio/transcriptions` service with
-  your own key (stored in the Keychain).
+- **Local**: Parakeet Ultra (Moondream's post-trained NVIDIA Parakeet TDT 0.6B v3; 25 European
+  languages, automatic detection) via [FluidAudio](https://github.com/FluidInference/FluidAudio) on
+  the Neural Engine, ~630 MB on disk. It was as fast as Parakeet v3 and noticeably more accurate (on
+  the author's meetings and an English lesson: Whisper sided with Ultra 216 times and with v3 71
+  times where the two differed), so v3 is no longer offered. It runs in a helper process that exits
+  after a few idle minutes, so the model does not sit in memory.
+- **Cloud, optional**: Groq, OpenAI, OpenRouter or any OpenAI-compatible `/audio/transcriptions`
+  service with your own key (stored in the Keychain). The models come from the provider's own list;
+  if the service fails, the local model takes over. (Anthropic's API has no speech-to-text.)
 - A small pill at the bottom of the screen with the microphone level (its scale adapts to the
   microphone and the room, and is remembered per microphone), ё restored in the text,
   history with search, kept forever or for 30 days / 90 days / a year, and statistics (words,
@@ -115,7 +119,7 @@ Maccy was measured as it was used, not as a clean install: version 2.7.1 after f
 running with a real history, so its memory figures depend on that history. The copying rows ran the
 same scripts against both apps.
 
-**Local dictation** (NVIDIA Parakeet TDT 0.6B v3, CoreML on the Neural Engine):
+**Local dictation** (measured with NVIDIA Parakeet TDT 0.6B v3; Ultra has the same architecture and speed; CoreML on the Neural Engine):
 
 | | Time |
 |---|---|
@@ -232,7 +236,7 @@ app, for free, without sending your text or voice anywhere.
 | Fix text typed in the wrong layout (RU ↔ EN) | Punto Switcher, Caramba Switcher | Auto-fix + Caps Lock |
 | Switch layout with Caps Lock | System setting, Karabiner-Elements | Built in, instant, with undo |
 | Clipboard history | Maccy, Paste, Raycast | ⇧⌘C, searchable in either layout |
-| Voice typing / dictation | superwhisper, MacWhisper, Wispr Flow, TypeWhisper | Local Parakeet on the Neural Engine, or Groq/OpenAI |
+| Voice typing / dictation | superwhisper, MacWhisper, Wispr Flow, TypeWhisper | Local Parakeet on the Neural Engine, or Groq/OpenAI/OpenRouter |
 | Transcribe Telegram voice messages | Telegram Premium, bots | Local, from Telegram's cache |
 
 ## FAQ
@@ -259,7 +263,7 @@ takes ⇧⌘C; quit it or change the shortcut.
   Telegram's own database on this Mac, opened read-only with [SQLCipher](https://github.com/sqlcipher/SQLCipher.swift)
   (BSD) in the helper process; with a passcode set in Telegram the names are not shown.
 - The ё dictionary is built from [eyo-kernel](https://github.com/hcodes/eyo-kernel) (MIT,
-  `GeniusTyper/yo-LICENSE.txt`). Parakeet v3 is NVIDIA's, Parakeet Ultra is Moondream's, both CC BY 4.0.
+  `GeniusTyper/yo-LICENSE.txt`). Parakeet Ultra is Moondream's, built on NVIDIA's Parakeet v3, CC BY 4.0.
 - The dictation animations (a cat in a wig, Bruce Almighty) are made from widely shared GIFs and
   a film clip; they are not covered by the MIT license and belong to their owners.
 

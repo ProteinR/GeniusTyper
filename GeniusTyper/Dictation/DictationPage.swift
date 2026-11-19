@@ -1,9 +1,29 @@
 import AVFoundation
 import SwiftUI
 
-/// Диктовка: the switch, the key and how recording behaves, the model (on this Mac or by API) and
-/// the Telegram voice messages. While dictation is off the rest is grey and nothing records.
+/// The pages of Диктовка opened from its list.
+enum DictationSubpage: String {
+    case recognition, key, recording, indicator, history, voices
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .recognition: return "Распознавание"
+        case .key: return "Клавиша"
+        case .recording: return "Запись и вставка"
+        case .indicator: return "Индикатор"
+        case .history: return "История диктовок"
+        case .voices: return "Голосовые из Telegram"
+        }
+    }
+}
+
+/// Диктовка: the switch, then a list of rows (as in MeetRec and System Settings), each opening its
+/// own page, so nothing unfolds in place (asked 2026-11-19 after an interactive mockup). The
+/// Telegram voices are one row with their switch; their page opens only while they are on.
+/// While dictation is off the rest is grey and nothing records.
 struct DictationPage: View {
+    @ObservedObject var navigation: SettingsWindow.Navigation
+    @ObservedObject private var store = EngineStore.shared
     @AppStorage("dictationEnabled") private var enabled = false
     @AppStorage("dictationSounds") private var sounds = true
     @AppStorage("escCancels") private var escCancels = true
@@ -21,146 +41,23 @@ struct DictationPage: View {
     @AppStorage("levelStyle") private var levelStyle = LevelStyle.bars.rawValue
 
     var body: some View {
-        Form {
-            Section {
-                ModuleSwitch(title: "Диктовка",
-                             detail: enabled ? "Говорите — текст вставляется в приложение, где стоит курсор"
-                                             : "Пока выключено, приложение не трогает микрофон и не загружает модель",
-                             isOn: Binding(get: { enabled }, set: { Dictation.shared.setEnabled($0) }))
+        Group {
+            if let sub = navigation.dictationSub {
+                VStack(spacing: 0) {
+                    SubpageHeader(back: "Диктовка", title: sub.title) { navigation.dictationSub = nil }
+                    subpage(sub)
+                }
+            } else {
+                list
             }
-            Section("Запись") {
-                ShortcutRow(kind: .dictation)
-                Toggle(isOn: $escCancels) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Esc отменяет запись")
-                        Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Toggle(isOn: $sounds) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Звуки")
-                        Text("Начало записи, вставка текста, ошибка").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Toggle(isOn: $yo) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Ставить ё в надиктованном")
-                        Text("Модель почти всегда пишет «е»: «еще» → «ещё», как при наборе").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                LabeledContent {
-                    HStack(spacing: 6) {
-                        Menu {
-                            ForEach(LevelStyle.allCases) { item in
-                                Button(item.title) { levelStyle = item.rawValue }
-                            }
-                        } label: {
-                            Text((LevelStyle(rawValue: levelStyle) ?? .bars).title)
-                        }
-                        .fixedSize()
-                        Button("Показать") { Indicator.shared.demo() }
-                    }
-                } label: {
-                    Text("Индикатор")
-                    Text("Как индикатор показывает громкость голоса").font(.caption).foregroundStyle(.secondary)
-                }
-                LabeledContent {
-                    HStack(spacing: 6) {
-                        Menu {
-                            ForEach(Mascot.allCases) { item in
-                                Button(item.title) { mascot = item.rawValue }
-                            }
-                        } label: {
-                            Text((Mascot(rawValue: mascot) ?? .none).title)
-                        }
-                        .fixedSize()
-                        Button("Показать") { Indicator.shared.demo() }
-                    }
-                } label: {
-                    Text("Анимация")
-                    Text("Персонаж над индикатором печатает, пока вы говорите").font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .active(enabled)
-            Section("История") {
-                LabeledContent {
-                    Menu {
-                        ForEach([30, 90, 365, 0], id: \.self) { days in
-                            Button(Self.daysTitle(days)) {
-                                if days != 0 && (dictationKeepDays == 0 || days < dictationKeepDays) {
-                                    shorterKeep = days
-                                } else {
-                                    dictationKeepDays = days
-                                }
-                            }
-                        }
-                    } label: {
-                        Text(Self.daysTitle(dictationKeepDays))
-                    }
-                    .fixedSize()
-                } label: {
-                    Text("Хранить диктовки")
-                    Text("Только текст, без звука. Статистика считается по истории: старые диктовки уходят и из неё")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("Диктовок: \(dictations.count) · \(ByteCountFormatter.string(fromByteCount: dictations.bytes, countStyle: .file))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            ModelSections()
-                .active(enabled)
-            Section {
-                Toggle(isOn: Binding(get: { voices }, set: { voices = $0; HotkeyMonitor.shared.installVoices() })) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Голосовые из Telegram")
-                        Text("Расшифровка последних голосовых: в панели по клику на значок и по сочетанию клавиш")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                ShortcutRow(kind: .voices)
-                    .active(voices)
-                Toggle(isOn: $senders) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Показывать отправителя")
-                        Text("Имя берётся из базы Telegram на этом Mac (только чтение). Не работает, если в Telegram включён код-пароль")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .active(voices)
-                LabeledContent {
-                    Menu {
-                        ForEach([1, 3, 7, 30, 0], id: \.self) { days in
-                            Button(Self.daysTitle(days)) { keepDays = days }
-                        }
-                    } label: {
-                        Text(Self.daysTitle(keepDays))
-                    }
-                    .fixedSize()
-                } label: {
-                    Text("Хранить расшифровки")
-                    Text(keepDays == 0
-                         ? "Показываются сразу; новые голосовые за последние 7 дней расшифровываются при открытии"
-                         : "Показываются сразу; новые голосовые за это время расшифровываются при открытии")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("Расшифровок: \(stored.count) · \(ByteCountFormatter.string(fromByteCount: stored.bytes, countStyle: .file))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .active(voices)
-            } footer: {
-                Text("Голосовые берутся из кеша приложения Telegram. Чтобы туда не попадали голосовые из групп, в Telegram → Настройки → Данные и память → Автозагрузка медиа оставьте голосовые только для личных чатов.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .active(enabled)
         }
-        .formStyle(.grouped)
+        .toggleStyle(LightSwitchStyle())
         .onAppear(perform: countStored)
         .onChange(of: keepDays) { countStored() }
         .onChange(of: dictationKeepDays) {
             History.shared.prune(keepDays: dictationKeepDays)
             countStored()
         }
-        .toggleStyle(LightSwitchStyle())
         .alert("Хранить диктовки \(Self.daysTitle(shorterKeep ?? 0))?",
                isPresented: Binding(get: { shorterKeep != nil }, set: { if !$0 { shorterKeep = nil } })) {
             Button("Удалить", role: .destructive) {
@@ -169,6 +66,223 @@ struct DictationPage: View {
             Button("Отмена", role: .cancel) {}
         } message: {
             Text("Более старые удалятся без возврата, вместе со статистикой за то время.")
+        }
+    }
+
+    private func open(_ sub: DictationSubpage) { navigation.dictationSub = sub }
+
+    private var list: some View {
+        Form {
+            Section {
+                ModuleSwitch(title: "Диктовка",
+                             detail: enabled ? "Говорите — текст вставляется в приложение, где стоит курсор"
+                                             : "Пока выключено, приложение не трогает микрофон и не загружает модель",
+                             isOn: Binding(get: { enabled }, set: { Dictation.shared.setEnabled($0) }))
+            }
+            Section {
+                SettingsLinkRow(symbol: "bolt.fill", tint: .indigo, title: "Распознавание", summary: store.summary) { open(.recognition) }
+                SettingsLinkRow(symbol: "keyboard.fill", tint: .blue, title: "Клавиша",
+                                summary: HotkeyMonitor.shared.shortcut.title + (escCancels ? String(localized: " · Esc отменяет") : "")) { open(.key) }
+                SettingsLinkRow(symbol: "speaker.wave.2.fill", tint: .green, title: "Запись и вставка", summary: recordingSummary) { open(.recording) }
+                SettingsLinkRow(symbol: "waveform", tint: .pink, title: "Индикатор", summary: indicatorSummary) { open(.indicator) }
+                SettingsLinkRow(symbol: "clock.fill", tint: .orange, title: "История диктовок", summary: historySummary) { open(.history) }
+            }
+            .active(enabled)
+            Section {
+                SettingsLinkRow(symbol: "paperplane.fill", tint: .cyan, title: "Голосовые из Telegram",
+                                summary: voices ? voicesSummary
+                                                : String(localized: "Выключено. Расшифровывает голосовые из Telegram на этом Mac; включите, чтобы настроить"),
+                                opens: voices, action: { open(.voices) }) {
+                    Toggle("", isOn: voicesBinding).labelsHidden().fixedSize()
+                }
+            }
+            .active(enabled)
+        }
+        .formStyle(.grouped)
+    }
+
+    private var voicesBinding: Binding<Bool> {
+        Binding(get: { voices }, set: { voices = $0; HotkeyMonitor.shared.installVoices() })
+    }
+
+    private var recordingSummary: String {
+        var parts = [sounds ? String(localized: "Звуки") : String(localized: "Без звуков")]
+        if yo { parts.append(String(localized: "ё в надиктованном")) }
+        return parts.joined(separator: " · ")
+    }
+
+    private var indicatorSummary: String {
+        let style = (LevelStyle(rawValue: levelStyle) ?? .bars).title
+        let animation = Mascot(rawValue: mascot) ?? .none
+        return animation == .none ? style : "\(style) · \(animation.title)"
+    }
+
+    private var historySummary: String {
+        String(localized: "Хранить: \(Self.daysTitle(dictationKeepDays).lowercased()) · диктовок: \(dictations.count) · \(ByteCountFormatter.string(fromByteCount: dictations.bytes, countStyle: .file))")
+    }
+
+    private var voicesSummary: String {
+        String(localized: "\(HotkeyMonitor.shared.voicesShortcut.title) · хранить: \(Self.daysTitle(keepDays).lowercased()) · расшифровок: \(stored.count)")
+    }
+
+    @ViewBuilder
+    private func subpage(_ sub: DictationSubpage) -> some View {
+        switch sub {
+        case .recognition:
+            RecognitionPage()
+        case .key:
+            Form {
+                Section {
+                    ShortcutRow(kind: .dictation)
+                    Toggle(isOn: $escCancels) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Esc отменяет запись")
+                            Text("Текст не вставляется").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+        case .recording:
+            Form {
+                Section {
+                    Toggle(isOn: $sounds) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Звуки")
+                            Text("Начало записи, вставка текста, ошибка").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle(isOn: $yo) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Ставить ё в надиктованном")
+                            Text("Модель почти всегда пишет «е»: «еще» → «ещё», как при наборе").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Надиктованное, которое не вставилось, есть в окне истории буфера (⇧⌘C) на вкладке «Диктовки».")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+        case .indicator:
+            Form {
+                Section {
+                    LabeledContent {
+                        HStack(spacing: 6) {
+                            Menu {
+                                ForEach(LevelStyle.allCases) { item in
+                                    Button(item.title) { levelStyle = item.rawValue }
+                                }
+                            } label: {
+                                Text((LevelStyle(rawValue: levelStyle) ?? .bars).title)
+                            }
+                            .fixedSize()
+                            Button("Показать") { Indicator.shared.demo() }
+                        }
+                    } label: {
+                        Text("Индикатор")
+                        Text("Как индикатор показывает громкость голоса").font(.caption).foregroundStyle(.secondary)
+                    }
+                    LabeledContent {
+                        HStack(spacing: 6) {
+                            Menu {
+                                ForEach(Mascot.allCases) { item in
+                                    Button(item.title) { mascot = item.rawValue }
+                                }
+                            } label: {
+                                Text((Mascot(rawValue: mascot) ?? .none).title)
+                            }
+                            .fixedSize()
+                            Button("Показать") { Indicator.shared.demo() }
+                        }
+                    } label: {
+                        Text("Анимация")
+                        Text("Персонаж над индикатором печатает, пока вы говорите").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+        case .history:
+            Form {
+                Section {
+                    LabeledContent {
+                        Menu {
+                            ForEach([30, 90, 365, 0], id: \.self) { days in
+                                Button(Self.daysTitle(days)) {
+                                    if days != 0 && (dictationKeepDays == 0 || days < dictationKeepDays) {
+                                        shorterKeep = days
+                                    } else {
+                                        dictationKeepDays = days
+                                    }
+                                }
+                            }
+                        } label: {
+                            Text(Self.daysTitle(dictationKeepDays))
+                        }
+                        .fixedSize()
+                    } label: {
+                        Text("Хранить диктовки")
+                        Text("Только текст, без звука. Статистика считается по истории: старые диктовки уходят и из неё")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("Диктовок: \(dictations.count) · \(ByteCountFormatter.string(fromByteCount: dictations.bytes, countStyle: .file))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    LabeledContent {
+                        Button("Открыть") { SettingsWindow.shared.show(history: .dictations) }
+                    } label: {
+                        Text("Все диктовки")
+                        Text("Поиск, копирование, удаление. Быстрее — ⇧⌘C, вкладка «Диктовки»").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+        case .voices:
+            Form {
+                Section {
+                    Toggle(isOn: voicesBinding) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Голосовые из Telegram")
+                            Text("Расшифровка последних голосовых: в панели по клику на значок и по сочетанию клавиш")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    ShortcutRow(kind: .voices)
+                        .active(voices)
+                    Toggle(isOn: $senders) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Показывать отправителя")
+                            Text("Имя берётся из базы Telegram на этом Mac (только чтение). Не работает, если в Telegram включён код-пароль")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .active(voices)
+                    LabeledContent {
+                        Menu {
+                            ForEach([1, 3, 7, 30, 0], id: \.self) { days in
+                                Button(Self.daysTitle(days)) { keepDays = days }
+                            }
+                        } label: {
+                            Text(Self.daysTitle(keepDays))
+                        }
+                        .fixedSize()
+                    } label: {
+                        Text("Хранить расшифровки")
+                        Text(keepDays == 0
+                             ? "Показываются сразу; новые голосовые за последние 7 дней расшифровываются при открытии"
+                             : "Показываются сразу; новые голосовые за это время расшифровываются при открытии")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Text("Расшифровок: \(stored.count) · \(ByteCountFormatter.string(fromByteCount: stored.bytes, countStyle: .file))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .active(voices)
+                } footer: {
+                    Text("Голосовые берутся из кеша приложения Telegram. Чтобы туда не попадали голосовые из групп, в Telegram → Настройки → Данные и память → Автозагрузка медиа оставьте голосовые только для личных чатов.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .formStyle(.grouped)
         }
     }
 

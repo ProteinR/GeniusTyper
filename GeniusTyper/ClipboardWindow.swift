@@ -3,7 +3,10 @@ import SwiftUI
 
 /// The clipboard history window (⇧⌘C), at the mouse pointer, like Maccy's: a search field and the
 /// list with app icons; the preview of the selected entry opens beside it after a pause.
-/// ⏎ pastes, ⌥⏎ only copies, ⇧⏎ pastes without formatting, ⌘1…⌘9 paste an entry, ⌥⌫ deletes, Esc closes.
+/// ⏎ pastes, ⌥⏎ only copies, ⇧⏎ pastes without formatting, ⌥1…⌥9 paste an entry, ⌥⌫ deletes, Esc closes.
+/// Two tabs while dictation is on (asked 2026-11-19: a dictation pasted nowhere, with the menu bar
+/// icon hidden, could not be found): "Буфер обмена", always the one it opens on, and "Диктовки",
+/// the dictation history; Tab, ⌘1 and ⌘2 switch.
 ///
 /// A non-activating panel that still takes the keyboard: the app the user is in stays active, so
 /// ⌘V after the panel closes goes to it.
@@ -112,10 +115,20 @@ enum ClipboardWindow {
     }
 
     /// Keys the list handles; everything else goes to the search field.
+    /// Key codes of 1…9 on the number row (the same in every layout; ⌥ turns the characters into symbols).
+    private static let digitCodes: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
+
     private static func handle(_ key: Key) -> Bool {
         guard let panel, key.window == panel.windowNumber else { return false }
         let flags = key.flags
+        if let digit = digitCodes.firstIndex(of: key.code) {
+            if flags == .option { model.use(index: digit); return true }
+            if flags == .command, digit < 2 { model.switchTo(digit == 0 ? .clipboard : .dictations); return true }
+        }
         switch key.code {
+        case 48 where flags.isDisjoint(with: [.command, .option, .control]):  // Tab, ⇧Tab
+            model.switchTo(model.tab == .clipboard ? .dictations : .clipboard)
+            return true
         case 125: model.move(1); return true  // ↓
         case 126: model.move(-1); return true  // ↑
         case 121: model.move(10); return true  // Page Down
@@ -128,10 +141,6 @@ enum ClipboardWindow {
             model.deleteSelected()
             return true
         default:
-            if flags == .command, let digit = key.characters.flatMap(Int.init), (1...9).contains(digit) {
-                model.use(index: digit - 1)
-                return true
-            }
             if flags == .command, key.code == 12 || key.code == 13 { hide(); return true }  // ⌘Q, ⌘W
             return false
         }
@@ -257,6 +266,11 @@ private final class Background: NSVisualEffectView {
 /// What the list shows: the history filtered by the search, and the selected entry.
 @MainActor
 final class ClipboardPanelModel: ObservableObject {
+    enum Tab { case clipboard, dictations }
+
+    @Published private(set) var tab = Tab.clipboard
+    /// The tabs show only while dictation is on.
+    @Published private(set) var showsTabs = false
     @Published var query = "" {
         didSet { filter() }
     }
@@ -274,7 +288,17 @@ final class ClipboardPanelModel: ObservableObject {
     /// hovering selects only after the pointer itself moves.
     private var mouse = NSPoint.zero
 
+    /// The newest dictations as list entries (read from the history on switching to the tab), and
+    /// the history row behind each.
+    private var dictationItems: [ClipboardItem] = []
+    private var dictationIDs: [UUID: Int64] = [:]
+    private static let dictationLimit = 500
+
     func open() {
+        showsTabs = Prefs.dictationEnabled
+        tab = .clipboard
+        dictationItems = []
+        dictationIDs = [:]
         query = ""
         filter()
         mouse = NSEvent.mouseLocation
@@ -286,13 +310,40 @@ final class ClipboardPanelModel: ObservableObject {
         previewShown = false
     }
 
+    func switchTo(_ tab: Tab) {
+        guard showsTabs, tab != self.tab else { return }
+        self.tab = tab
+        if tab == .dictations { loadDictations() }
+        selection = nil
+        filter()
+        opened += 1  // back to the top, the search field focused
+    }
+
+    private func loadDictations() {
+        dictationIDs = [:]
+        dictationItems = History.shared.page(offset: 0, limit: Self.dictationLimit).map { entry in
+            let id = Self.uuid(entry.id)
+            dictationIDs[id] = entry.id
+            return ClipboardItem(id: id, date: entry.date, kind: .text, app: entry.appBundle.isEmpty ? nil : entry.appBundle,
+                                 text: entry.text, stored: [:], hash: "dictation-\(entry.id)")
+        }
+    }
+
+    private static func uuid(_ id: Int64) -> UUID {
+        var bytes = [UInt8](repeating: 0, count: 16)
+        withUnsafeBytes(of: id.bigEndian) { for (index, byte) in $0.enumerated() { bytes[8 + index] = byte } }
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+
     private func filter() {
+        let source = tab == .clipboard ? store.items : dictationItems
         let query = query.trimmingCharacters(in: .whitespaces)
         if query.isEmpty {
-            results = store.items
+            results = source
         } else {
             let alternative = ClipboardRules.retyped(query, renderer: Observer.shared.layouts)
-            results = store.items.filter { ClipboardRules.matches($0, query: query, alternative: alternative) }
+            results = source.filter { ClipboardRules.matches($0, query: query, alternative: alternative) }
         }
         select(results.first?.id)
     }
@@ -345,12 +396,29 @@ final class ClipboardPanelModel: ObservableObject {
 
     func use(_ item: ClipboardItem, paste: Bool, plain: Bool) {
         ClipboardWindow.hide()
+        if dictationIDs[item.id] != nil {
+            // A dictation goes in as dictation does: the clipboard is given back afterwards.
+            let text = item.text ?? ""
+            if paste && KeyPoster.canPost {
+                DispatchQueue.main.async { _ = Paster.paste(text) }
+            } else {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+            Log.info("Dictation from the history \(paste ? "pasted" : "copied")", "clipboard")
+            return
+        }
         store.use(item, paste: paste && KeyPoster.canPost, plain: plain)
     }
 
     func deleteSelected() {
         guard let index = results.firstIndex(where: { $0.id == selection }) else { return }
-        store.delete(results[index])
+        if let id = dictationIDs[results[index].id] {
+            History.shared.delete(id: id)
+            dictationItems.removeAll { $0.id == results[index].id }
+        } else {
+            store.delete(results[index])
+        }
         results.remove(at: index)
         selection = nil
         select(results.indices.contains(index) ? results[index].id : results.last?.id)
@@ -363,6 +431,15 @@ private struct ClipboardListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if model.showsTabs {
+                HStack(spacing: 2) {
+                    tabButton(.clipboard, "Буфер обмена", "⌘1")
+                    tabButton(.dictations, "Диктовки", "⌘2")
+                }
+                .padding(2)
+                .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 7))
+                .padding(.horizontal, 8).padding(.top, 8)
+            }
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Поиск", text: $model.query)
@@ -372,7 +449,7 @@ private struct ClipboardListView: View {
             .padding(.horizontal, 12).padding(.vertical, 9)
             Divider()
             if model.results.isEmpty {
-                Text(model.query.isEmpty ? "История пуста" : "Ничего не найдено")
+                Text(!model.query.isEmpty ? "Ничего не найдено" : model.tab == .clipboard ? "История пуста" : "Диктовок пока нет")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -401,14 +478,22 @@ private struct ClipboardListView: View {
             }
             Divider()
             HStack(spacing: 6) {
-                Text("⏎ вставить · ⌥⏎ скопировать · ⇧⏎ без форматирования · ⌥⌫ удалить")
+                Text(model.tab == .clipboard ? "⏎ вставить · ⌥⏎ скопировать · ⇧⏎ без форматирования · ⌥⌫ удалить"
+                                              : "⏎ вставить · ⌥⏎ скопировать · ⌥⌫ удалить · Tab — буфер")
                     .font(.caption2).foregroundStyle(.secondary)
                     .lineLimit(1).minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
                 // As in Maccy: the settings from the history itself (the clipboard page).
                 Button {
                     ClipboardWindow.hide()
-                    DispatchQueue.main.async { SettingsWindow.shared.show(page: .clipboard) }
+                    let tab = model.tab
+                    DispatchQueue.main.async {
+                        if tab == .clipboard {
+                            SettingsWindow.shared.show(page: .clipboard)
+                        } else {
+                            SettingsWindow.shared.show(page: .dictation, dictation: .history)
+                        }
+                    }
                 } label: {
                     Image(systemName: "gearshape").foregroundStyle(.secondary)
                 }
@@ -419,6 +504,20 @@ private struct ClipboardListView: View {
         }
         .onAppear { searchFocused = true }
         .onChange(of: model.opened) { _, _ in searchFocused = true }
+    }
+
+    private func tabButton(_ tab: ClipboardPanelModel.Tab, _ title: LocalizedStringKey, _ key: String) -> some View {
+        Button { model.switchTo(tab) } label: {
+            HStack(spacing: 4) {
+                Text(title).fontWeight(model.tab == tab ? .semibold : .regular)
+                Text(key).font(.caption2).foregroundStyle(.tertiary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 3)
+            .background(model.tab == tab ? Color(nsColor: .controlBackgroundColor) : .clear, in: RoundedRectangle(cornerRadius: 5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -450,7 +549,7 @@ private struct ClipboardRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if index < 9 {
-                Text("⌘\(index + 1)").font(.caption).foregroundStyle(selected ? .white.opacity(0.8) : .secondary)
+                Text("⌥\(index + 1)").font(.caption).foregroundStyle(selected ? .white.opacity(0.8) : .secondary)
             }
         }
         .padding(.horizontal, 8).padding(.vertical, 4)
