@@ -102,6 +102,19 @@ used, and the app registers itself as a login item.
   (`SkipCounter`, memory only), shows `ExceptionSuggestion`: a non-activating panel in the top right
   ("«rtl» — в исключения?", hides after 8 s, never takes the focus). Off by default in terminals and
   code editors. Genius Typer's own events carry a marker and are ignored by the tap.
+  **Edge punctuation** (0.23.0, from the words log 2026-11-21): when every key converted is no
+  word, punctuation at the edges stays as typed if its key is a letter in the other layout and
+  the letters between are a word there (`LayoutDetector.fix`): "gkfy:" → "план:", not "планЖ";
+  a whole conversion that is a word still wins ("kj," → "лоб").
+  **Caps Lock after a one-letter word** (0.23.0): Caps Lock right after "f " (nothing typed since)
+  retypes the letter in the other layout and switches ("а "), only for a letter that is no word as
+  typed and one there (`OneLetterWords.follows`, `retypeLettersBefore`, journal `capsFix`; Caps
+  Lock again undoes it). The words log had f/z/d/b/e erased and retyped by hand ~25 times in a
+  month, and 23 Caps Lock presses right after "f ".
+  **Remote desktops** (`AutoFixRules.remote`: Microsoft Remote Desktop / Windows App, Screen
+  Sharing, Parsec, AnyDesk, TeamViewer, RustDesk, Jump, VNC Viewer, Citrix) are always "Не
+  исправлять в" and Caps Lock retypes nothing there (it still switches): the remote computer types
+  with its own layout ("clear" was judged "сдуфк" 13 times in Remote Desktop).
 - **ё** (`Yoficator.swift`, as Caramba's "Ёфикатор"; panel "Ставить ё", on by default): after a
   space or punctuation a Russian word typed with е where ё is always right gets it ("еще" → "ещё",
   "Артем" → "Артём", "ЕЩЕ" → "ЕЩЁ"); also in words the auto-fix turns into Russian. Only the letters

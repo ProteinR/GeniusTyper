@@ -154,6 +154,15 @@ enum AutoFixRules {
         "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "com.apple.dt.Xcode",
         "com.microsoft.VSCode", "com.jetbrains.goland", "com.google.antigravity", "com.google.antigravity-ide",
     ]
+
+    /// Remote desktops: keys go to the remote computer, which types with its own layout, so the
+    /// Mac's layout says nothing about the text and a retyped word would be typed wrong. Never
+    /// fixed (2026-11-21: in Microsoft Remote Desktop "clear" was judged "сдуфк" 13 times).
+    static let remote: Set<String> = [
+        "com.microsoft.rdc.macos", "com.microsoft.rdc.osx.beta", "com.apple.ScreenSharing",
+        "tv.parsec.www", "com.philandro.anydesk", "com.teamviewer.TeamViewer", "com.carriez.rustdesk",
+        "com.p5sys.jump.mac.viewer", "com.realvnc.vncviewer", "com.citrix.receiver.icaviewer.mac",
+    ]
 }
 
 /// Words of one letter. The detector skips them, so "z" in "z lfdfq" (= "я давай") needs its own

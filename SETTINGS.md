@@ -26,7 +26,7 @@ Read everything: `defaults read com.dmemruk.GeniusTyper`. Remove a key to go bac
 | `autoFix` | bool | `true` | Fix words typed in the wrong layout after a space or punctuation. |
 | `yoFix` | bool | `true` | "еще" → "ещё". |
 | `userExceptions` | array of strings | empty | Words, as typed, that are never fixed. |
-| `autoOffApps` | array of bundle IDs | terminals, Xcode, VS Code, JetBrains GoLand, Antigravity | "Не исправлять в": typing is watched, nothing is fixed. |
+| `autoOffApps` | array of bundle IDs | terminals, Xcode, VS Code, JetBrains GoLand, Antigravity | "Не исправлять в": typing is watched, nothing is fixed. Remote desktops (`AutoFixRules.remote`) are always treated as listed. |
 | `excludedApps` | array of bundle IDs | Bitwarden, 1Password, Passwords, Keychain Access, Yubico | "Не следить в": neither typing nor copies are watched. |
 | `wordLog` | bool | `true` | Words log of fixes (`Application Support/GeniusTyper/words/`, 30 days). |
 | `fixExceptions` | array of strings | empty | Hashes from undos in versions before 0.3.0 (still honoured). |

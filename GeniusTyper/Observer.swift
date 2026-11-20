@@ -322,6 +322,8 @@ final class Observer: ObservableObject {
                 return
             } else if retypeCurrentWord() {
                 return
+            } else if retypeLettersBefore() {
+                return
             } else {
                 capsSwitchTime = Date().timeIntervalSince1970
                 CapsLockSwitch.switchLayout(renderer: layouts)
@@ -397,8 +399,8 @@ final class Observer: ObservableObject {
         if autoFix, let target = layouts.other(than: word.language),
            !exceptions.contains(word.keys, language: word.language),
            !userExceptions.contains(word.keys, language: word.language, renderer: layouts),
-           LayoutDetector.system.fixes(word.keys, language: word.language,
-                                       before: tracker.words(before: word.id, limit: 2), renderer: layouts) {
+           let fixedWord = LayoutDetector.system.fix(word.keys, language: word.language,
+                                                     before: tracker.words(before: word.id, limit: 2), renderer: layouts) {
             if keep {
                 var entry = JournalEntry(t: Date(timeIntervalSince1970: time), kind: .autoSkip, app: currentApp)
                 entry.from = word.language
@@ -410,14 +412,15 @@ final class Observer: ObservableObject {
                     suggestException(word.keys, language: word.language)
                 }
             } else {
-                fixLayout(word, to: target, separator: separator, time: time)
+                fixLayout(word, as: fixedWord, in: target, separator: separator, time: time)
             }
         } else if !keep {
             restoreYo(word, separator: separator, time: time)
         }
     }
 
-    private func fixLayout(_ word: FinishedWord, to target: String, separator: (key: TypedKey, typed: String), time: TimeInterval) {
+    private func fixLayout(_ word: FinishedWord, as fixedWord: String, in target: String,
+                           separator: (key: TypedKey, typed: String), time: TimeInterval) {
         // One-letter words just before it go along: "z lfdfq" → "я давай", not "z давай".
         let letters = tracker.singleLetterWords(before: word.id)
             .prefix { $0.language == word.language && OneLetterWords.follows($0.key, from: word.language, to: target, renderer: layouts) }
@@ -426,7 +429,6 @@ final class Observer: ObservableObject {
         let lettersFixed = letters.map { layouts.text([$0.key], language: target) + " " }.joined()
         let original = lettersOriginal + layouts.text(word.keys, language: word.language) + separator.typed
         let fixedSeparator = layouts.character(separator.key, language: target).map(String.init) ?? separator.typed
-        let fixedWord = layouts.text(word.keys, language: target)
         let fixed = lettersFixed + ((target == "ru" ? withYo(fixedWord) : nil) ?? fixedWord) + fixedSeparator
         recorder.markAutoFixed(word.id)
         let ids = Set([word.id] + letters.map(\.id))
@@ -505,7 +507,7 @@ final class Observer: ObservableObject {
     /// words are words ("z lfdfq" → "я давай", "ghbdtn rfr ltkf" → "привет как дела"). False when it
     /// already is: the second press then works as a single one.
     private func convertPhrase() -> Bool {
-        guard canPost, !paused, !isExcluded else { return false }
+        guard canPost, !paused, !isExcluded, !isRemote else { return false }
         let parts = tracker.phrase
         guard let target = PhraseFix.target(parts, detector: .system, renderer: layouts) else { return false }
         let original = PhraseFix.text(parts, renderer: layouts)
@@ -535,7 +537,7 @@ final class Observer: ObservableObject {
     /// and the layout is switched, so the word goes on in the right one. A word already right as
     /// typed is left alone (false: Caps Lock only switches).
     private func retypeCurrentWord() -> Bool {
-        guard canPost, !paused, !isExcluded, let word = tracker.currentWord,
+        guard canPost, !paused, !isExcluded, !isRemote, let word = tracker.currentWord,
               let target = layouts.other(than: word.language),
               LayoutDetector.system.retypesOnCapsLock(word.keys, language: word.language, renderer: layouts)
         else { return false }
@@ -555,6 +557,40 @@ final class Observer: ObservableObject {
         write([entry])
         logWords(.capsFix, typed: typed, result: retyped, time: now)
         Log.debug("Caps Lock mid-word: \(word.keys.count) keys retyped \(word.language)→\(target)", "auto")
+        return true
+    }
+
+    /// Caps Lock right after a one-letter word and its space, nothing typed since: the letter
+    /// was meant in the other layout ("f" + space + Caps Lock → "а "), so it is retyped there and
+    /// the layout switched. Only a letter that is no word as typed and one there ("a", "я" stay).
+    /// 2026-11-21: "f", "z", "d", "b", "e" were erased and retyped by hand ~25 times in a month,
+    /// and Caps Lock came right after "f " 23 times.
+    private func retypeLettersBefore() -> Bool {
+        guard canPost, !paused, !isExcluded, !isRemote, tracker.currentWord == nil,
+              let language = tracker.lastSingleLetterWords.first?.language,
+              let target = layouts.other(than: language) else { return false }
+        let letters = Array(tracker.lastSingleLetterWords
+            .prefix { $0.language == language && OneLetterWords.follows($0.key, from: language, to: target, renderer: layouts) }
+            .reversed())
+        guard !letters.isEmpty else { return false }
+        let original = letters.map { layouts.text([$0.key], language: language) + " " }.joined()
+        let fixed = letters.map { layouts.text([$0.key], language: target) + " " }.joined()
+        guard original.count == 2 * letters.count, fixed.count == 2 * letters.count else { return false }
+        let now = Date().timeIntervalSince1970
+        capsSwitchTime = now
+        KeyPoster.change(from: original, to: fixed)
+        CapsLockSwitch.select(target, renderer: layouts)
+        let ids = Set(letters.map(\.id))
+        tracker.relabel(words: ids, to: target)
+        lastFix = LastFix(keys: letters.map(\.key), originalLanguage: language, fixedLanguage: target,
+                          original: original, fixed: fixed, time: now, wordIDs: ids)
+        var entry = JournalEntry(t: Date(timeIntervalSince1970: now), kind: .capsFix, app: currentApp)
+        entry.from = language
+        entry.to = target
+        entry.len = letters.count
+        write([entry])
+        logWords(.capsFix, typed: original, result: fixed, time: now)
+        Log.debug("Caps Lock after a one-letter word: \(letters.count) retyped \(language)→\(target)", "auto")
         return true
     }
 
@@ -625,8 +661,15 @@ final class Observer: ObservableObject {
                                             typed: trim(typed), result: result.map(trim))])
     }
 
+    /// Remote desktops are always "Не исправлять в", whatever the list says.
     private func isAutoOff(_ app: String?) -> Bool {
-        app.map(autoOffApps.contains) ?? false
+        app.map { autoOffApps.contains($0) || AutoFixRules.remote.contains($0) } ?? false
+    }
+
+    /// A remote desktop: the remote computer's own layout makes the text, not the Mac's, so
+    /// nothing is retyped there, not even by Caps Lock (it still switches the Mac's layout).
+    private var isRemote: Bool {
+        currentApp.map(AutoFixRules.remote.contains) ?? false
     }
 }
 

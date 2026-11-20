@@ -52,12 +52,14 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 
 - **Caps Lock** switches between the English and the Russian layout on every press (⇧ + Caps Lock
   is the real Caps Lock). Right after an automatic fix it undoes it; in the middle of a word it
-  retypes the letters in the other layout; **twice** it converts the whole phrase since the last
-  line break.
+  retypes the letters in the other layout; right after a one-letter word and its space ("f ")
+  it retypes that letter ("а "); **twice** it converts the whole phrase since the last line break.
 - **Auto-fix**: after a space or punctuation, a word that is gibberish as typed and a real word in
   the other layout is retyped and the layout switched. Caps Lock right after undoes it; ⇧+Space
-  ends a word without fixing it. Off by default in terminals and code editors; per-app and
-  per-word exceptions.
+  ends a word without fixing it. Punctuation at the word's edges stays as typed when the letters
+  alone are the word ("gkfy:" → "план:"). Off by default in terminals and code editors, always off
+  in remote desktops (Microsoft Remote Desktop, Screen Sharing, Parsec…: the remote computer's
+  layout makes the text); per-app and per-word exceptions.
 - **ё**: a dictionary of ~107 000 forms where ё is always right (`все`/`всё`-like words are never
   touched).
 - macOS spell checking in both languages decides what is a word: no cloud, no word lists sent

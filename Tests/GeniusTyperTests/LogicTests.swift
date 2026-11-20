@@ -73,6 +73,23 @@ final class WordTrackerTests: XCTestCase {
         XCTAssertTrue(tracker.singleLetterWords(before: words(space()).first!.id).isEmpty)
     }
 
+    func testOneLetterWordsAtTheEnd() {
+        // "z f " just typed: both, nearest first (for Caps Lock right after).
+        type([6], "en")
+        _ = space()
+        type([3], "en")
+        _ = space()
+        XCTAssertEqual(tracker.lastSingleLetterWords.map(\.key.code), [3, 6])
+        // A letter is being typed: no word at the end yet.
+        type([6], "en")
+        XCTAssertTrue(tracker.lastSingleLetterWords.isEmpty)
+        // "ok ": two letters, nothing.
+        tracker = WordTracker(renderer: FakeLayouts())
+        type([31, 40], "en")
+        _ = space()
+        XCTAssertTrue(tracker.lastSingleLetterWords.isEmpty)
+    }
+
     func testPhraseAndRelabel() {
         type([6], "en")
         _ = space()
@@ -337,11 +354,25 @@ final class AutoFixTests: XCTestCase {
 
     func testWholeWordVerdictForAutoFix() {
         // "ghbdtn," : trimmed it is "привет" (journal says fix), but every key converted gives
-        // "приветб", so the auto-fixer must leave it.
+        // "приветб", which is no word.
         let keys = FakeLayouts.keys(privet + [43])
         XCTAssertEqual(detector.verdict(keys, language: "en", renderer: FakeLayouts()), .fix)
         XCTAssertNotEqual(detector.verdict(keys, language: "en", renderer: FakeLayouts(), trimEdges: false), .fix)
         XCTAssertEqual(detector.verdict(FakeLayouts.keys(privet), language: "en", renderer: FakeLayouts(), trimEdges: false), .fix)
+    }
+
+    func testEdgePunctuationStaysAsTyped() {
+        // "ghbdtn," → "привет," (as "gkfy:" → "план:"): the letters converted, the comma kept.
+        XCTAssertEqual(detector.fix(FakeLayouts.keys(privet + [43]), language: "en", before: [], renderer: FakeLayouts()), "привет,")
+        XCTAssertEqual(detector.fix(FakeLayouts.keys([47] + privet), language: "en", before: [], renderer: FakeLayouts()), ".привет")
+        XCTAssertEqual(detector.fix(FakeLayouts.keys(privet), language: "en", before: [], renderer: FakeLayouts()), "привет")
+        // The whole word converted is a word: every key goes ("kj," → "лоб").
+        let whole = LayoutDetector { word, _ in ["привет", "приветб"].contains(word) }
+        XCTAssertEqual(whole.fix(FakeLayouts.keys(privet + [43]), language: "en", before: [], renderer: FakeLayouts()), "приветб")
+        // Letters that are no word in the other layout: nothing.
+        XCTAssertNil(detector.fix(FakeLayouts.keys([5, 4, 43]), language: "en", before: [], renderer: FakeLayouts()))
+        // "привет," typed right in Russian: nothing.
+        XCTAssertNil(detector.fix(FakeLayouts.keys(privet + [44]), language: "ru", before: [], renderer: FakeLayouts()))
     }
 
     func testCapsLockMidWordKeepsARightWord() {

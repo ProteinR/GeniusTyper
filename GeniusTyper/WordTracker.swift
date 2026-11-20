@@ -212,9 +212,20 @@ struct WordTracker {
     /// One-letter words right before word `id`, each followed by one space ("z" in "z lfdfq"),
     /// nearest first.
     func singleLetterWords(before id: Int) -> [(id: Int, key: TypedKey, language: String)] {
-        guard var index = line.firstIndex(where: {
+        guard let index = line.firstIndex(where: {
             if case let .key(_, _, _, wordID) = $0 { return wordID == id } else { return false }
         }) else { return [] }
+        return singleLetterWords(endingAt: index)
+    }
+
+    /// One-letter words at the end of the line, each followed by one space ("f " just typed),
+    /// nearest first; empty while erasing.
+    var lastSingleLetterWords: [(id: Int, key: TypedKey, language: String)] {
+        erasing == nil ? singleLetterWords(endingAt: line.count) : []
+    }
+
+    private func singleLetterWords(endingAt end: Int) -> [(id: Int, key: TypedKey, language: String)] {
+        var index = end
         var words: [(id: Int, key: TypedKey, language: String)] = []
         while index >= 2, case .separator(" ") = line[index - 1],
               case let .key(key, language, _, wordID?) = line[index - 2] {

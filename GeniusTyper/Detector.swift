@@ -56,12 +56,46 @@ struct LayoutDetector {
     /// вифи were all in the exceptions). One word of context is not enough: "ok ns" is still "ok ты".
     func fixes(_ keys: [TypedKey], language: String, before: [(keys: [TypedKey], language: String)],
                renderer: LayoutRendering) -> Bool {
-        guard verdict(keys, language: language, renderer: renderer, trimEdges: false) == .fix else { return false }
-        guard keys.count <= Self.shortWord else { return true }
+        fix(keys, language: language, before: before, renderer: renderer) != nil
+    }
+
+    /// The word as the auto-fixer types it in the other layout, nil when it is left alone. Every
+    /// key is converted when that gives a word ("kj," → "лоб"). Otherwise punctuation at the edges
+    /// as typed stays as it is when its key is a letter in the other layout and the letters
+    /// between are a word there: "gkfy:" → "план:", not "планЖ" (2026-11-21: "план:",
+    /// "сделано:", "так:", "помогло:" were left unfixed for that).
+    func fix(_ keys: [TypedKey], language: String, before: [(keys: [TypedKey], language: String)],
+             renderer: LayoutRendering) -> String? {
+        guard let other = renderer.other(than: language) else { return nil }
+        let text: String
+        if verdict(keys, language: language, renderer: renderer, trimEdges: false) == .fix {
+            text = renderer.text(keys, language: other)
+        } else if let edged = keepingEdges(keys, language: language, other: other, renderer: renderer) {
+            text = edged
+        } else {
+            return nil
+        }
+        guard keys.count <= Self.shortWord else { return text }
         let context = before.prefix(2)
-        return !(context.count == 2 && context.allSatisfy {
+        let insidePhrase = context.count == 2 && context.allSatisfy {
             $0.language == language && verdict($0.keys, language: language, renderer: renderer) == .keep
-        })
+        }
+        return insidePhrase ? nil : text
+    }
+
+    /// The letters converted, the punctuation at the edges as typed; nil when no edge key would
+    /// become a letter (then it is the whole-word conversion) or the letters are no word there.
+    private func keepingEdges(_ keys: [TypedKey], language: String, other: String, renderer: LayoutRendering) -> String? {
+        let typedChars = keys.map { renderer.character($0, language: language) }
+        guard let first = typedChars.firstIndex(where: { $0?.isLetter == true }),
+              let last = typedChars.lastIndex(where: { $0?.isLetter == true }) else { return nil }
+        let edges = Array(keys[..<first]) + Array(keys[(last + 1)...])
+        guard edges.contains(where: { renderer.character($0, language: other)?.isLetter == true }) else { return nil }
+        let core = Array(keys[first...last])
+        guard verdict(core, language: language, renderer: renderer, trimEdges: false) == .fix else { return nil }
+        return renderer.text(Array(keys[..<first]), language: language)
+            + renderer.text(core, language: other)
+            + renderer.text(Array(keys[(last + 1)...]), language: language)
     }
 
     /// Up to this many keys a word is "short" for `fixes(_:language:before:renderer:)`.
