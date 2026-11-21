@@ -304,21 +304,23 @@ returns `eventNotHandledErr` for the others (otherwise the first handler swallow
   `DICTATION-PROFILING.md`). The demo
   ("Показать", `--indicator-demo`) uses the owner's levels.
   **"Нити"** (`strands`, `Strands.swift`; 0.24.0, asked 2026-11-21 after an iPhone dictation
-  video, tuned by the owner in an interactive preview with a live microphone): a dot matrix
-  (2.5 pt pitch, 1.5 pt dots, faint 7 % background dots, 120 × 24 pt) on which three sine strands
-  braid, narrowing and fading to the ends. `StrandsMotion` (pure, `StrandsMotionTests`) keeps its
-  own scale in dB from the raw level (a 24 dB window from the recent loud speech, cut 5 dB above
-  the background; the background rises only while the sound is within 6 dB of it, so a held vowel
-  never fades): ordinary speech raises the strands to about half and makes them run (each follows
-  the voice with its own lag, so they never move as one rigid shape: the owner's first try with
-  every strand in step looked frozen); a sudden sound (fast envelope 0.3 over the slow one:
-  "Д", "Т", the start of a syllable; ~0.4–0.6 a second in the owner's speech, every one in
-  "д-д-д") makes them jump, fan out up and down, run in opposite directions and light two more
-  strands for 0.35 s, with a wave from the middle to the ends and a brief brighter flash. The
-  owner's settings from the preview are the constants at the top (height 0.62, life 0.45, hit
-  0.65, 2 extra strands, fill 0.05). Hiss (с, ш) from the preview is left out: it needs the zero
-  crossings, the app gets only levels. Drawn by `StrandsPainter` into one reused bitmap a frame,
-  set as one layer's contents (~0.6 ms a frame), never a layer per dot.
+  video, tuned by the owner in an interactive preview; redone in 0.24.1 after the owner saw it
+  on the monitor): an LED-like dot matrix (2 pt dots 3 pt apart on whole points, so crisp on a
+  1× monitor too; 11 rows, 180 × 32 pt, the pill 44 pt high) on which two mirrored sine strands,
+  two dots thick, braid into a chain of three lenses, the band between them lit at a third,
+  the rest a faint grid, narrowing and fading to the ends, as in the reference. `StrandsMotion`
+  (pure, `StrandsMotionTests`) takes the loudness of the bars' `LevelScale` (learnt per
+  microphone): ordinary speech raises the strands and makes them run; a sudden sound (fast
+  envelope 0.3 over the slow one: "Д", "Т", the start of a syllable; ~0.8 a second in the
+  owner's speech, every one in "д-д-д") makes them jump, part, light two more strands fanning up
+  and down for 0.35 s, with a wave from the middle and a brighter flash. Lessons from 0.24.0:
+  three thin strands of 1.5 pt dots 2.5 pt apart with a glow, chosen in a preview watched 3.5×
+  enlarged, read as a blurred band on the monitor; its own dB scale let the background creep
+  into quiet speech, so the strands lay flat while the owner spoke. Judge such styles by a
+  real-size render made with the app's code, not an enlarged web preview. Hiss (с, ш) from the
+  preview is left out (needs zero crossings, the app gets only levels). Drawn by
+  `StrandsPainter` into one reused bitmap a frame, set as one layer's contents (~1 ms a frame),
+  never a layer per dot.
   **Animation** (`Mascot`, asked 2026-10-26; Основное → Анимация, "Показать" = 6 s demo, also
   `--indicator-demo`): a cat in a wig or Bruce Almighty above the pill while recording/transcribing,
   typing at full speed while the level is above 0.3 (and 0.2 s after), then slowing down

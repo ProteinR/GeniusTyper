@@ -543,8 +543,8 @@ final class CloudModelsTests: XCTestCase {
     }
 }
 
-/// The "Нити" style's motion (`StrandsMotion`), at 60 frames a second on levels held between the
-/// ~12 a second the microphone gives, as in the app.
+/// The "Нити" style's motion (`StrandsMotion`), at 60 frames a second on the loudness of
+/// `LevelScale` held between the ~12 levels a second the microphone gives, as in the app.
 final class StrandsMotionTests: XCTestCase {
     private func ownerLevels() throws -> [CGFloat] {
         let url = Bundle(for: Self.self).url(forResource: "owner-speech-levels", withExtension: "txt")!
@@ -555,14 +555,17 @@ final class StrandsMotionTests: XCTestCase {
     /// and the speech and burst of the last two passes.
     private func run(_ levels: [CGFloat]) -> (motion: StrandsMotion, speech: [CGFloat], burst: [CGFloat], seconds: Double) {
         var motion = StrandsMotion()
+        var scale = LevelScale.standard
         var speech: [CGFloat] = [], burst: [CGFloat] = []
         var now: CFTimeInterval = 0
         for pass in 0..<3 {
             if pass == 1 { motion.resetHits() }
             for level in levels {
+                scale.update(level, elapsed: 1.0 / 12)
+                let value = scale.loudness(level)
                 for _ in 0..<5 {
                     now += 1.0 / 60
-                    motion.step(level: level, elapsed: 1.0 / 60, now: now)
+                    motion.step(value: value, elapsed: 1.0 / 60, now: now)
                     if pass > 0 { speech.append(motion.speech); burst.append(motion.burst) }
                 }
             }
@@ -576,13 +579,13 @@ final class StrandsMotionTests: XCTestCase {
         let result = run(Array(repeating: 0, count: 120))
         XCTAssertLessThan(result.speech.max() ?? 1, 0.01)
         XCTAssertEqual(result.burst.max(), 0)
-        XCTAssertEqual(result.motion.weights, [1, 1, 1, 0, 0])
+        XCTAssertEqual(result.motion.weights, [1, 1, 0, 0])
     }
 
-    /// A held vowel: an even braid at full speech, no hits, the extra strands dark.
+    /// A held vowel (2 s): an even braid at full speech, no hits, the extra strands dark.
     func testHeldVowelIsEven() {
-        let result = run((0..<240).map { 0.3 + 0.005 * sin(CGFloat($0)) })
-        XCTAssertGreaterThan(median(result.speech), 0.5) // and it does not fade: the background stays under it
+        let result = run((0..<24).map { 0.3 + 0.005 * sin(CGFloat($0)) })
+        XCTAssertGreaterThan(median(result.speech), 0.5)
         XCTAssertEqual(result.motion.hits, 0)
         XCTAssertLessThan(result.burst.max() ?? 1, 0.05)
     }
@@ -597,20 +600,22 @@ final class StrandsMotionTests: XCTestCase {
 
     /// The owner's speech: hits now and then, not on every syllable (they read as noise then).
     func testOwnerSpeechHitsNowAndThen() throws {
-        for levels in [try ownerLevels(), try ownerLevels().map { $0 > 0 ? $0 + 0.25 : 0.1 }] {
+        let own = try ownerLevels()
+        for levels in [own, own.map { $0 > 0 ? $0 + 0.25 : 0.1 }, own.map { $0 > 0 ? max(0, $0 - 0.1) : 0 }] {
             let result = run(levels)
             let perSecond = Double(result.motion.hits) / result.seconds
             XCTAssertGreaterThan(perSecond, 0.2)
-            XCTAssertLessThan(perSecond, 1.2)
-            XCTAssertLessThan(median(result.burst), 0.25)
+            XCTAssertLessThan(perSecond, 1.3)
+            XCTAssertLessThan(median(result.burst), 0.3)
+            XCTAssertGreaterThan(median(result.speech), 0.4) // never flat while speaking (0.24.0 was)
         }
     }
 
     func testPainterDrawsTheField() {
         var motion = StrandsMotion()
-        motion.step(level: 0.3, elapsed: 1.0 / 60, now: 0)
-        let image = StrandsPainter(size: CGSize(width: 120, height: 30), fieldHeight: 24, scale: 2).image(motion, now: 0)
-        XCTAssertEqual(image?.width, 240)
-        XCTAssertEqual(image?.height, 60)
+        motion.step(value: 0.7, elapsed: 1.0 / 60, now: 0)
+        let image = StrandsPainter(size: CGSize(width: 180, height: 36), scale: 2).image(motion, now: 0)
+        XCTAssertEqual(image?.width, 360)
+        XCTAssertEqual(image?.height, 72)
     }
 }

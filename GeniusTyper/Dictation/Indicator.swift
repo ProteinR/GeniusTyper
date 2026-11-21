@@ -234,7 +234,7 @@ private final class PillView: NSView {
     override var fittingSize: NSSize {
         let textWidth: CGFloat
         switch state {
-        case .recording: return NSSize(width: 14 + 8 + 8 + bars.frame.width + 14, height: 38)
+        case .recording: return NSSize(width: 14 + 8 + 8 + bars.frame.width + 14, height: max(38, bars.frame.height + 8))
         case .transcribing: textWidth = ((String(localized: "Распознаю") + "...") as NSString).size(withAttributes: Self.textAttributes).width
         case .message: textWidth = (text as NSString).size(withAttributes: Self.textAttributes).width
         }
@@ -292,8 +292,6 @@ private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
     static let lineHeight: CGFloat = 2
-    /// The strands' dot field, inside `maxHeight` so their glow has room.
-    static let strandsHeight: CGFloat = 24
     /// Points from one point of the line to the next, and from one crest to the next.
     static let lineStep: CGFloat = 1.3
     static let crestSpacing: CGFloat = 18
@@ -316,6 +314,7 @@ private final class BarsView: NSView {
     private var strandsLayer: CALayer?
     private var strands = StrandsMotion()
     private var painter: StrandsPainter?
+    /// The newest loudness on the microphone's scale, for the strands.
     private var level: CGFloat = 0
     private var barLayers: [CALayer] = []
     private var flatLayer: CALayer?
@@ -348,7 +347,7 @@ private final class BarsView: NSView {
 
     func reset(style: LevelStyle) {
         self.style = style
-        setFrameSize(NSSize(width: style.width, height: Self.maxHeight))
+        setFrameSize(NSSize(width: style.width, height: style.height))
         columns = Array(repeating: 0, count: style.historyCount + 1)
         offset = 0
         trace = Array(repeating: 0, count: LevelStyle.traceCount)
@@ -373,8 +372,8 @@ private final class BarsView: NSView {
         // The strands fade over a fifth of the field on the left, less on the right, as previewed.
         let (fadeLeft, fadeRight) = style == .strands ? (bounds.width * 0.22, bounds.width * 0.13) : (Self.fadeLeft, Self.fadeRight)
         fade.locations = [0, NSNumber(value: Double(fadeLeft / bounds.width)), NSNumber(value: Double(1 - fadeRight / bounds.width)), 1]
-        content.shadowRadius = style == .strands ? 1.5 : Self.glowRadius
-        content.shadowOpacity = style == .strands ? 0.45 : Self.glowOpacity
+        // No glow on the strands: on a real screen it blurred the dots into a band (0.24.0).
+        content.shadowOpacity = style == .strands ? 0 : Self.glowOpacity
         CATransaction.commit()
         switch style {
         case .bars, .wave:
@@ -418,7 +417,7 @@ private final class BarsView: NSView {
             strandsLayer = layer
             strands = StrandsMotion()
             level = 0
-            painter = StrandsPainter(size: bounds.size, fieldHeight: Self.strandsHeight, scale: scale)
+            painter = StrandsPainter(size: bounds.size, scale: scale)
             updateStrands(now: CACurrentMediaTime())
         }
         startAnimating()
@@ -427,9 +426,8 @@ private final class BarsView: NSView {
     /// The microphone level: 0…1 of the height on `scale`, its loudness for the bars and the
     /// wave, its amplitude for the line.
     func push(_ level: CGFloat, scale: LevelScale) {
-        // The strands keep their own scale in dB (`StrandsMotion`), so they get the raw level.
-        self.level = level
         let value = style == .line ? scale.amplitude(level) : scale.loudness(level)
+        self.level = value
         if value > 0 { heardSound = true }
         target = value
     }
@@ -458,7 +456,7 @@ private final class BarsView: NSView {
         lastStep = now
         if style == .strands {
             // Always moving, slowly in silence, so it never looks frozen.
-            strands.step(level: level, elapsed: elapsed, now: now)
+            strands.step(value: level, elapsed: elapsed, now: now)
             updateStrands(now: now)
             return
         }
@@ -575,9 +573,12 @@ enum LevelStyle: String, CaseIterable, Identifiable {
         case .bars: 70
         case .wave: 98
         case .line: 100
-        case .strands: 120
+        case .strands: 180
         }
     }
+
+    /// The strands' 11 rows of dots (33 pt) need a taller pill.
+    var height: CGFloat { self == .strands ? StrandsPainter.fieldHeight + 4 : BarsView.maxHeight }
 
     static var current: LevelStyle { LevelStyle(rawValue: Prefs.levelStyle) ?? .bars }
 }
