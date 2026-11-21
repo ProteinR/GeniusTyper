@@ -94,8 +94,9 @@ Catalog (`GeniusTyper/Localizable.xcstrings`), so an English translation can be 
 - **Cloud, optional**: Groq, OpenAI, OpenRouter or any OpenAI-compatible `/audio/transcriptions`
   service with your own key (stored in the Keychain). The models come from the provider's own list;
   if the service fails, the local model takes over.
-- A small pill at the bottom of the screen with the microphone level (its scale adapts to the
-  microphone and the room, and is remembered per microphone), ё restored in the text,
+- A small pill at the bottom of the screen with the microphone level as bars, a wave, a line or
+  strands on a dot matrix that jump and fan out on sudden sounds such as "d" or "t" (its scale
+  adapts to the microphone and the room, and is remembered per microphone), ё restored in the text,
   history with search, kept forever or for 30 days / 90 days / a year, and statistics (words,
   words per minute, time saved).
 - **Telegram voice messages**: the newest voice messages from the official Telegram app's cache,

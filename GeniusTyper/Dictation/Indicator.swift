@@ -292,6 +292,8 @@ private final class BarsView: NSView {
     static let maxHeight: CGFloat = 30
     static let quietHeight: CGFloat = 10
     static let lineHeight: CGFloat = 2
+    /// The strands' dot field, inside `maxHeight` so their glow has room.
+    static let strandsHeight: CGFloat = 24
     /// Points from one point of the line to the next, and from one crest to the next.
     static let lineStep: CGFloat = 1.3
     static let crestSpacing: CGFloat = 18
@@ -310,6 +312,11 @@ private final class BarsView: NSView {
     private var lastStep: CFTimeInterval = 0
     private var animation: Timer?
     private var lineLayer: CAShapeLayer?
+    /// "Нити": one layer showing a bitmap drawn each frame (`StrandsPainter`), not a layer per dot.
+    private var strandsLayer: CALayer?
+    private var strands = StrandsMotion()
+    private var painter: StrandsPainter?
+    private var level: CGFloat = 0
     private var barLayers: [CALayer] = []
     private var flatLayer: CALayer?
     /// Holds the bars or the line and glows; the view's own layer fades its ends (`fade`).
@@ -355,12 +362,19 @@ private final class BarsView: NSView {
         barLayers = []
         flatLayer?.removeFromSuperlayer()
         flatLayer = nil
+        strandsLayer?.removeFromSuperlayer()
+        strandsLayer = nil
+        painter = nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         content.frame = bounds
         // Taller than the view, so the glow above and below the highest bars is not cut off.
         fade.frame = bounds.insetBy(dx: 0, dy: -2 * Self.glowRadius)
-        fade.locations = [0, NSNumber(value: Double(Self.fadeLeft / bounds.width)), NSNumber(value: Double(1 - Self.fadeRight / bounds.width)), 1]
+        // The strands fade over a fifth of the field on the left, less on the right, as previewed.
+        let (fadeLeft, fadeRight) = style == .strands ? (bounds.width * 0.22, bounds.width * 0.13) : (Self.fadeLeft, Self.fadeRight)
+        fade.locations = [0, NSNumber(value: Double(fadeLeft / bounds.width)), NSNumber(value: Double(1 - fadeRight / bounds.width)), 1]
+        content.shadowRadius = style == .strands ? 1.5 : Self.glowRadius
+        content.shadowOpacity = style == .strands ? 0.45 : Self.glowOpacity
         CATransaction.commit()
         switch style {
         case .bars, .wave:
@@ -395,6 +409,17 @@ private final class BarsView: NSView {
             content.addSublayer(layer)
             lineLayer = layer
             updateLine()
+        case .strands:
+            let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            let layer = CALayer()
+            layer.frame = bounds
+            layer.contentsScale = scale
+            content.addSublayer(layer)
+            strandsLayer = layer
+            strands = StrandsMotion()
+            level = 0
+            painter = StrandsPainter(size: bounds.size, fieldHeight: Self.strandsHeight, scale: scale)
+            updateStrands(now: CACurrentMediaTime())
         }
         startAnimating()
     }
@@ -402,6 +427,8 @@ private final class BarsView: NSView {
     /// The microphone level: 0…1 of the height on `scale`, its loudness for the bars and the
     /// wave, its amplitude for the line.
     func push(_ level: CGFloat, scale: LevelScale) {
+        // The strands keep their own scale in dB (`StrandsMotion`), so they get the raw level.
+        self.level = level
         let value = style == .line ? scale.amplitude(level) : scale.loudness(level)
         if value > 0 { heardSound = true }
         target = value
@@ -429,6 +456,12 @@ private final class BarsView: NSView {
         let now = CACurrentMediaTime()
         let elapsed = CGFloat(min(0.05, now - lastStep))
         lastStep = now
+        if style == .strands {
+            // Always moving, slowly in silence, so it never looks frozen.
+            strands.step(level: level, elapsed: elapsed, now: now)
+            updateStrands(now: now)
+            return
+        }
         // The bars rise fast and fall a little slower, so syllables stay visible and a pause shows
         // within ~0.1 s; the line keeps the smoothing it was chosen with.
         let rate: CGFloat = style == .line ? 0.25 : (target > smooth ? 0.5 : 0.3)
@@ -441,6 +474,8 @@ private final class BarsView: NSView {
             trace.removeFirst()
             trace.append(smooth)
             if !flat { updateLine() }
+        case .strands:
+            break
         case .bars, .wave:
             // Quiet bars still move on to the next place, so they stop evenly, none half faded.
             let quiet = smooth == 0 && columns.allSatisfy { $0 == 0 }
@@ -454,6 +489,14 @@ private final class BarsView: NSView {
             columns[columns.count - 1] = smooth
             updateBars()
         }
+    }
+
+    private func updateStrands(now: CFTimeInterval) {
+        guard let strandsLayer, let image = painter?.image(strands, now: now) else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        strandsLayer.contents = image
+        CATransaction.commit()
     }
 
     private func updateLine() {
@@ -497,7 +540,7 @@ private final class BarsView: NSView {
 
 /// How the pill shows the microphone level (Настройки → Диктовка → Индикатор).
 enum LevelStyle: String, CaseIterable, Identifiable {
-    case bars, wave, line
+    case bars, wave, line, strands
 
     static let traceCount = 75
 
@@ -508,6 +551,7 @@ enum LevelStyle: String, CaseIterable, Identifiable {
         case .bars: String(localized: "Полоски")
         case .wave: String(localized: "Плотная волна")
         case .line: String(localized: "Линия")
+        case .strands: String(localized: "Нити")
         }
     }
 
@@ -515,7 +559,7 @@ enum LevelStyle: String, CaseIterable, Identifiable {
         switch self {
         case .bars: 14
         case .wave: 28
-        case .line: 0
+        case .line, .strands: 0
         }
     }
 
@@ -531,6 +575,7 @@ enum LevelStyle: String, CaseIterable, Identifiable {
         case .bars: 70
         case .wave: 98
         case .line: 100
+        case .strands: 120
         }
     }
 
